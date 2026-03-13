@@ -314,6 +314,18 @@ Tailwind v4 将所有 utility classes 输出到 `@layer utilities` 中。根据 
 
 **解法：** 删掉这段 reset。Tailwind v4 Preflight（`@layer base`）已经包含了 `* { margin: 0; padding: 0; box-sizing: border-box }`，不需要重复。如果必须写自定义 base 样式，用 `@layer base { ... }` 包裹。
 
+### Gateway 流式文本是累积快照，不是增量 delta
+
+Gateway `chat` 事件的 `state: 'delta'` 帧，其 text 内容**可能是累积快照（cumulative snapshot）而非增量 chunk**。同一帧也可能重复发送。如果 `messageStore.appendStreamDelta()` 直接用 `+=` 拼接，会导致消息重复显示（例如 "你好你好你好..."）。
+
+**解法：** 使用 `mergeGatewayStreamText(previous, incoming)` 做智能合并（已在 `@clawwork/shared/constants.ts` 中实现）。合并逻辑：
+1. `incoming === previous` → 忽略重复帧
+2. `incoming.startsWith(previous)` → 累积快照，直接替换为 incoming
+3. `previous.startsWith(incoming)` → 旧快照重放，忽略
+4. 否则 → 真正的增量 chunk，正常拼接
+
+同时，`state: 'final'` 帧也可能携带最后一段文本，必须在 `finalizeStream()` 之前先 `appendStreamDelta()` 处理掉，否则丢失末尾内容。
+
 ### Electron 自动截图排障方法
 
 开发模式下 `main/index.ts` 自动在 `did-finish-load` 后截图到 `/tmp/clawwork-screenshot.png`，也支持 `Cmd+Shift+S` 手动触发。当截图看起来没变化时，不要反复重启——用 `executeJavaScript` 注入诊断脚本 dump `getComputedStyle()` 到 `/tmp/clawwork-debug.json`，直接确认 CSS 是否生效。

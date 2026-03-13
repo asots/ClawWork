@@ -604,13 +604,13 @@ S3-compatible（AWS S3 / MinIO / Cloudflare R2）
 
 #### 4.1 体验优化
 
-- [ ] **T4-1** 主题系统：dark / light 主题切换，CSS Variables + Tailwind v4
+- [x] **T4-1** 主题系统：dark / light 主题切换，CSS Variables + Tailwind v4
   - ✅ Check：Settings 中可切换主题，所有组件跟随变化
-- [ ] **T4-2** 全局搜索：Task 标题 + 文件名 + 消息内容全文检索（SQLite FTS5）
+- [x] **T4-2** 全局搜索：Task 标题 + 文件名 + 消息内容全文检索（SQLite FTS5）
   - ✅ Check：搜索结果点击可跳转到对应 Task 或文件
-- [ ] **T4-3** Settings 页面：OpenClaw Server 地址配置 + Workspace 路径配置 + 主题切换
+- [x] **T4-3** Settings 页面：OpenClaw Server 地址配置 + Workspace 路径配置 + 主题切换
   - ✅ Check：修改 Server 地址后重连成功
-- [ ] **T4-4** 错误处理 + 重连：WebSocket 断线提示、重连动画、离线状态展示
+- [x] **T4-4** 错误处理 + 重连：WebSocket 断线提示、重连动画、离线状态展示
   - ✅ Check：拔网线 → 显示断线提示 → 恢复后自动重连
 
 #### 4.2 打包分发

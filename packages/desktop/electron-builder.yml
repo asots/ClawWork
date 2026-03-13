@@ -3,9 +3,36 @@ productName: ClawWork
 directories:
   buildResources: build
   output: dist
+files:
+  - "out/**/*"
+  - "node_modules/**/*"
+  - "package.json"
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 mac:
-  target: dmg
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+        - universal
+    - target: zip
+      arch:
+        - x64
+        - arm64
+        - universal
+  category: public.app-category.developer-tools
   identity: null
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  icon: build/icon.icns
 dmg:
   writeUpdateInfo: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false

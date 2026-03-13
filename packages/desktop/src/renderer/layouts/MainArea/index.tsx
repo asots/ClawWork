@@ -15,6 +15,7 @@ import StreamingMessage from '@/components/StreamingMessage'
 import ThinkingIndicator from '@/components/ThinkingIndicator'
 import ChatInput from '@/components/ChatInput'
 import FileBrowser from '../FileBrowser'
+import logo from '@/assets/logo.png'
 
 interface MainAreaProps {
   onTogglePanel: () => void
@@ -29,9 +30,7 @@ function WelcomeScreen() {
     >
       <div className="relative mb-6">
         <div className="absolute inset-0 scale-[2.5] rounded-full bg-[var(--accent)] opacity-[0.06] blur-2xl" />
-        <div className="relative w-16 h-16 rounded-2xl bg-[var(--accent-soft)] flex items-center justify-center shadow-[var(--glow-accent)]">
-          <span className="text-[var(--accent)] text-3xl font-bold tracking-tight">C</span>
-        </div>
+        <img src={logo} alt="ClawWork" className="relative w-16 h-16 rounded-2xl shadow-[var(--glow-accent)]" />
       </div>
       <h3 className="text-2xl font-semibold text-[var(--text-primary)] mb-1.5 tracking-tight">ClawWork</h3>
       <p className="text-sm text-[var(--text-muted)] mb-6">{t('mainArea.welcomeSubtitle')}</p>

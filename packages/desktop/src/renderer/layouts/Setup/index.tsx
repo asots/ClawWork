@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { motion as motionPresets } from '@/styles/design-tokens'
 import { Button } from '@/components/ui/button'
+import logo from '@/assets/logo.png'
 
 interface SetupProps {
   onSetupComplete: () => void
@@ -53,9 +54,7 @@ export default function Setup({ onSetupComplete }: SetupProps) {
           <div className="flex flex-col items-center text-center space-y-3">
             <div className="relative">
               <div className="absolute inset-0 scale-[2.5] rounded-full bg-[var(--accent)] opacity-[0.06] blur-2xl" />
-              <div className="relative w-16 h-16 rounded-2xl bg-[var(--accent-soft)] flex items-center justify-center shadow-[var(--glow-accent)]">
-                <span className="text-[var(--accent)] text-3xl font-bold tracking-tight">C</span>
-              </div>
+              <img src={logo} alt="ClawWork" className="relative w-16 h-16 rounded-2xl shadow-[var(--glow-accent)]" />
             </div>
             <h1 className="text-2xl font-semibold text-[var(--text-primary)] tracking-tight">
               {t('setup.welcome')}

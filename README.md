@@ -70,7 +70,7 @@ sudo xattr -rd com.apple.quarantine "/Applications/ClawWork.app"
 
 ## Project Structure
 
-```
+```bash
 packages/
   shared/     # @clawwork/shared — types, protocol, constants (zero dependencies)
   desktop/    # @clawwork/desktop — Electron app
