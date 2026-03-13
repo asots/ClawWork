@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import i18n from '../i18n'
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs))
@@ -11,16 +12,20 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['minute', 60_000],
 ]
 
-const rtf = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' })
+function getRtf(): Intl.RelativeTimeFormat {
+  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en'
+  return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+}
 
 export function formatRelativeTime(date: Date): string {
   const diff = date.getTime() - Date.now()
+  const rtf = getRtf()
   for (const [unit, ms] of UNITS) {
     if (Math.abs(diff) >= ms) {
       return rtf.format(Math.round(diff / ms), unit)
     }
   }
-  return '刚刚'
+  return i18n.t('common.justNow')
 }
 
 export function formatFileSize(bytes: number): string {

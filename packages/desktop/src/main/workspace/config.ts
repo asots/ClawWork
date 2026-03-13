@@ -7,6 +7,7 @@ import { CONFIG_FILE_NAME, DEFAULT_WORKSPACE_DIR } from '@clawwork/shared';
 export interface AppConfig {
   workspacePath: string;
   theme?: 'dark' | 'light';
+  language?: 'en' | 'zh';
   gatewayUrl?: string;
   bootstrapToken?: string;
   password?: string;

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PanelRightOpen } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useTaskStore } from '@/stores/taskStore'
 import { useMessageStore, EMPTY_MESSAGES } from '@/stores/messageStore'
 import { useUiStore } from '@/stores/uiStore'
@@ -20,6 +21,7 @@ interface MainAreaProps {
 }
 
 function WelcomeScreen() {
+  const { t } = useTranslation()
   return (
     <motion.div
       {...motionPresets.fadeIn}
@@ -32,19 +34,20 @@ function WelcomeScreen() {
         </div>
       </div>
       <h3 className="text-2xl font-semibold text-[var(--text-primary)] mb-1.5 tracking-tight">ClawWork</h3>
-      <p className="text-sm text-[var(--text-muted)] mb-6">AI-powered task execution</p>
+      <p className="text-sm text-[var(--text-muted)] mb-6">{t('mainArea.welcomeSubtitle')}</p>
       <p className="text-[var(--text-secondary)] max-w-sm leading-relaxed text-sm">
-        描述你的任务，AI 将帮你规划并执行。
+        {t('mainArea.welcomeDesc1')}
         <br />
-        过程中产生的文件会自动归档管理。
+        {t('mainArea.welcomeDesc2')}
       </p>
     </motion.div>
   )
 }
 
 function ChatHeader({ onTogglePanel }: { onTogglePanel: () => void }) {
+  const { t } = useTranslation()
   const activeTask = useTaskStore((s) =>
-    s.tasks.find((t) => t.id === s.activeTaskId),
+    s.tasks.find((task) => task.id === s.activeTaskId),
   )
 
   return (
@@ -53,7 +56,7 @@ function ChatHeader({ onTogglePanel }: { onTogglePanel: () => void }) {
         {activeTask ? (
           <>
             <h2 className="font-medium text-[var(--text-primary)] truncate">
-              {activeTask.title || '新任务'}
+              {activeTask.title || t('common.newTask')}
             </h2>
             <span className={cn(
               'text-xs px-2 py-0.5 rounded-md',
@@ -61,7 +64,7 @@ function ChatHeader({ onTogglePanel }: { onTogglePanel: () => void }) {
                 ? 'bg-[var(--accent-dim)] text-[var(--accent)]'
                 : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
             )}>
-              {activeTask.status === 'active' ? '进行中' : '已完成'}
+              {activeTask.status === 'active' ? t('common.inProgress') : t('common.completed')}
             </span>
           </>
         ) : (
@@ -79,7 +82,7 @@ function ChatHeader({ onTogglePanel }: { onTogglePanel: () => void }) {
             <PanelRightOpen size={18} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>切换上下文面板</TooltipContent>
+        <TooltipContent>{t('mainArea.toggleContextPanel')}</TooltipContent>
       </Tooltip>
     </header>
   )
@@ -88,7 +91,7 @@ function ChatHeader({ onTogglePanel }: { onTogglePanel: () => void }) {
 function ChatContent() {
   const activeTaskId = useTaskStore((s) => s.activeTaskId)
   const activeTask = useTaskStore((s) =>
-    s.tasks.find((t) => t.id === s.activeTaskId),
+    s.tasks.find((task) => task.id === s.activeTaskId),
   )
   const messages = useMessageStore((s) =>
     activeTaskId ? (s.messagesByTask[activeTaskId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES,

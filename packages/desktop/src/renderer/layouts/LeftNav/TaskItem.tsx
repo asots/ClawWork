@@ -1,6 +1,7 @@
 import { type MouseEvent } from 'react'
 import { motion } from 'framer-motion'
 import { MessageSquare, Circle, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/utils'
 import { useTaskStore } from '@/stores/taskStore'
@@ -16,6 +17,7 @@ interface TaskItemProps {
 }
 
 export default function TaskItem({ task, active, onContextMenu }: TaskItemProps) {
+  const { t } = useTranslation()
   const setActiveTask = useTaskStore((s) => s.setActiveTask)
   const clearUnread = useUiStore((s) => s.clearUnread)
   const hasUnread = useUiStore((s) => s.unreadTaskIds.has(task.id))
@@ -49,7 +51,7 @@ export default function TaskItem({ task, active, onContextMenu }: TaskItemProps)
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <p className="font-medium truncate flex-1">
-            {task.title || '新任务'}
+            {task.title || t('common.newTask')}
           </p>
           {isStreaming ? (
             <Loader2 size={12} className="flex-shrink-0 animate-spin text-[var(--accent)]" />
@@ -60,7 +62,7 @@ export default function TaskItem({ task, active, onContextMenu }: TaskItemProps)
         <div className="flex items-center gap-1.5 mt-0.5">
           {task.status === 'completed' && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-              已完成
+              {t('common.completed')}
             </span>
           )}
           <p className="text-xs text-[var(--text-muted)]">

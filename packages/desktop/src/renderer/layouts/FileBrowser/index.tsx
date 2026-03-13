@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useFileStore } from '@/stores/fileStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useMessageStore } from '@/stores/messageStore'
@@ -25,6 +26,7 @@ function sortArtifacts(list: Artifact[], sortBy: 'date' | 'name' | 'type'): Arti
 }
 
 export default function FileBrowser() {
+  const { t } = useTranslation()
   const artifacts = useFileStore((s) => s.artifacts)
   const filterTaskId = useFileStore((s) => s.filterTaskId)
   const sortBy = useFileStore((s) => s.sortBy)
@@ -51,9 +53,9 @@ export default function FileBrowser() {
 
   const taskMap = useMemo(() => {
     const m = new Map<string, string>()
-    for (const t of tasks) m.set(t.id, t.title || '新任务')
+    for (const task of tasks) m.set(task.id, task.title || t('common.newTask'))
     return m
-  }, [tasks])
+  }, [tasks, t])
 
   const filtered = useMemo(() => {
     let list = filterTaskId
@@ -88,14 +90,14 @@ export default function FileBrowser() {
     <div className="flex h-full">
       <div className="flex flex-col flex-1 min-w-0">
         <header className="flex items-center gap-3 px-6 py-3 border-b border-[var(--border)] flex-shrink-0">
-          <h2 className="text-sm font-medium text-[var(--text-primary)]">文件管理</h2>
+          <h2 className="text-sm font-medium text-[var(--text-primary)]">{t('common.fileManager')}</h2>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索文件…"
+              placeholder={t('fileBrowser.searchFiles')}
               className={cn(
                 'h-7 pl-8 pr-3 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)]',
                 'text-xs text-[var(--text-secondary)] outline-none',
@@ -111,7 +113,7 @@ export default function FileBrowser() {
               'text-xs text-[var(--text-secondary)] outline-none',
             )}
           >
-            <option value="">全部任务</option>
+            <option value="">{t('fileBrowser.allTasks')}</option>
             {taskIdsWithArtifacts.map((id) => (
               <option key={id} value={id}>{taskMap.get(id) ?? id}</option>
             ))}
@@ -124,9 +126,9 @@ export default function FileBrowser() {
               'text-xs text-[var(--text-secondary)] outline-none',
             )}
           >
-            <option value="date">按时间</option>
-            <option value="name">按名称</option>
-            <option value="type">按类型</option>
+            <option value="date">{t('fileBrowser.sortByDate')}</option>
+            <option value="name">{t('fileBrowser.sortByName')}</option>
+            <option value="type">{t('fileBrowser.sortByType')}</option>
           </select>
         </header>
 
@@ -134,7 +136,7 @@ export default function FileBrowser() {
           <div className="px-6 py-4">
             {sorted.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <p className="text-sm text-[var(--text-muted)]">暂无文件</p>
+                <p className="text-sm text-[var(--text-muted)]">{t('common.noFiles')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">

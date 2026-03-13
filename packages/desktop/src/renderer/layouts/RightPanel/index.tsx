@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { X, FileText, GitBranch, CheckSquare, Square, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useTaskStore } from '@/stores/taskStore'
 import { useMessageStore, EMPTY_MESSAGES } from '@/stores/messageStore'
 import { cn } from '@/lib/utils'
@@ -54,6 +55,7 @@ function StepIcon({ status }: { status: ProgressStep['status'] }) {
 }
 
 export default function RightPanel({ onClose }: RightPanelProps) {
+  const { t } = useTranslation()
   const activeTaskId = useTaskStore((s) => s.activeTaskId)
   const messages = useMessageStore((s) =>
     activeTaskId ? (s.messagesByTask[activeTaskId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES,
@@ -61,11 +63,12 @@ export default function RightPanel({ onClose }: RightPanelProps) {
 
   const steps = extractProgressSteps(messages)
   const artifacts = collectArtifacts(messages)
+  const doneCount = steps.filter((s) => s.status === 'completed').length
 
   return (
     <div className="flex flex-col h-full pt-10">
       <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--border)] flex-shrink-0">
-        <h3 className="font-medium text-[var(--text-primary)]">上下文</h3>
+        <h3 className="font-medium text-[var(--text-primary)]">{t('rightPanel.context')}</h3>
         <Button variant="ghost" size="icon-sm" onClick={onClose}>
           <X size={16} />
         </Button>
@@ -73,19 +76,19 @@ export default function RightPanel({ onClose }: RightPanelProps) {
 
       <Tabs defaultValue="progress" className="flex flex-col flex-1 min-h-0">
         <TabsList className="mx-4 mt-2">
-          <TabsTrigger value="progress">进度</TabsTrigger>
-          <TabsTrigger value="artifacts">产物</TabsTrigger>
+          <TabsTrigger value="progress">{t('rightPanel.progress')}</TabsTrigger>
+          <TabsTrigger value="artifacts">{t('rightPanel.artifacts')}</TabsTrigger>
           <TabsTrigger value="git">Git</TabsTrigger>
         </TabsList>
 
         <ScrollArea className="flex-1">
           <TabsContent value="progress" className="p-4">
             {steps.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)] text-center py-4">暂无进度信息</p>
+              <p className="text-sm text-[var(--text-muted)] text-center py-4">{t('rightPanel.noProgress')}</p>
             ) : (
               <div className="space-y-1">
                 <p className="text-sm text-[var(--text-muted)] mb-2">
-                  {steps.filter((s) => s.status === 'completed').length}/{steps.length} 已完成
+                  {t('rightPanel.xOfYCompleted', { done: doneCount, total: steps.length })}
                 </p>
                 {steps.map((step, i) => (
                   <motion.div
@@ -110,7 +113,7 @@ export default function RightPanel({ onClose }: RightPanelProps) {
               {artifacts.length === 0 ? (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-sm text-[var(--text-secondary)]">
                     <FileText size={15} className="opacity-60" />
-                  <span className="truncate">暂无文件</span>
+                  <span className="truncate">{t('common.noFiles')}</span>
                 </div>
               ) : (
                 artifacts.map((a) => (
@@ -133,7 +136,7 @@ export default function RightPanel({ onClose }: RightPanelProps) {
           <TabsContent value="git" className="p-4">
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-sm text-[var(--text-secondary)]">
               <GitBranch size={15} className="opacity-60" />
-              <span className="truncate">暂无提交</span>
+              <span className="truncate">{t('rightPanel.noCommits')}</span>
             </div>
           </TabsContent>
         </ScrollArea>

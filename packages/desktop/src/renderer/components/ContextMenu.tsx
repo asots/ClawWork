@@ -1,5 +1,6 @@
 import { useState, useCallback, type MouseEvent } from 'react';
 import type { TaskStatus } from '@clawwork/shared';
+import i18n from '../i18n';
 
 export interface MenuItem {
   label: string;
@@ -40,21 +41,21 @@ export function useTaskContextMenu(
 
   if (state.taskStatus === 'active') {
     items.push({
-      label: '\u6807\u8BB0\u5B8C\u6210',
+      label: i18n.t('contextMenu.markCompleted'),
       action: () => updateStatus(state.taskId, 'completed'),
     });
     items.push({
-      label: '\u5F52\u6863',
+      label: i18n.t('contextMenu.archive'),
       action: () => updateStatus(state.taskId, 'archived'),
       danger: true,
     });
   } else if (state.taskStatus === 'completed') {
     items.push({
-      label: '\u91CD\u65B0\u6FC0\u6D3B',
+      label: i18n.t('contextMenu.reactivate'),
       action: () => updateStatus(state.taskId, 'active'),
     });
     items.push({
-      label: '\u5F52\u6863',
+      label: i18n.t('contextMenu.archive'),
       action: () => updateStatus(state.taskId, 'archived'),
       danger: true,
     });

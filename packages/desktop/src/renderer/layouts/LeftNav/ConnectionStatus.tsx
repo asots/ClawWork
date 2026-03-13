@@ -1,12 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 type Status = 'connected' | 'connecting' | 'disconnected'
 
 interface StatusConfig {
   color: string
-  label: string
-  hint?: string
+  labelKey: string
+  hintKey?: string
   pulse?: boolean
 }
 
@@ -18,15 +19,16 @@ interface ConnectionStatusProps {
 function computeConfig(status: Status): StatusConfig {
   switch (status) {
     case 'connected':
-      return { color: 'bg-[var(--accent)]', label: '已连接' }
+      return { color: 'bg-[var(--accent)]', labelKey: 'connection.connected' }
     case 'connecting':
-      return { color: 'bg-[var(--warning)]', label: '连接中…', pulse: true }
+      return { color: 'bg-[var(--warning)]', labelKey: 'connection.connecting', pulse: true }
     case 'disconnected':
-      return { color: 'bg-[var(--danger)]', label: '未连接', hint: 'Gateway 断开' }
+      return { color: 'bg-[var(--danger)]', labelKey: 'connection.disconnected', hintKey: 'connection.gatewayDown' }
   }
 }
 
 export default function ConnectionStatus({ gatewayStatus, className }: ConnectionStatusProps) {
+  const { t } = useTranslation()
   const cfg = computeConfig(gatewayStatus)
 
   return (
@@ -47,9 +49,9 @@ export default function ConnectionStatus({ gatewayStatus, className }: Connectio
           )}
         />
         <span className="text-[var(--text-muted)]">
-          {cfg.label}
-          {cfg.hint && (
-            <span className="ml-1 text-[var(--text-muted)] opacity-60">({cfg.hint})</span>
+          {t(cfg.labelKey)}
+          {cfg.hintKey && (
+            <span className="ml-1 text-[var(--text-muted)] opacity-60">({t(cfg.hintKey)})</span>
           )}
         </span>
       </motion.div>

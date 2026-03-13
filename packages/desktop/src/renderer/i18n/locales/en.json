@@ -1,0 +1,97 @@
+{
+  "common": {
+    "newTask": "New Task",
+    "completed": "Completed",
+    "inProgress": "In Progress",
+    "settings": "Settings",
+    "fileManager": "File Manager",
+    "noFiles": "No files yet",
+    "justNow": "just now",
+    "notConfigured": "Not configured",
+    "noTitle": "(Untitled)"
+  },
+  "leftNav": {
+    "searchTasks": "Search tasks\u2026",
+    "emptyHint": "Click \"New Task\" to start",
+    "appSettings": "App Settings"
+  },
+  "mainArea": {
+    "welcomeSubtitle": "AI-powered task execution",
+    "welcomeDesc1": "Describe your task and AI will plan and execute it.",
+    "welcomeDesc2": "Files produced along the way are auto-archived.",
+    "toggleContextPanel": "Toggle context panel"
+  },
+  "settings": {
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "connection": "Connection",
+    "gatewayUrl": "Gateway URL",
+    "tokenPlaceholder": "Leave empty to use default token",
+    "saveAndReconnect": "Save & Reconnect",
+    "storage": "Storage",
+    "workspace": "Workspace",
+    "workspaceHint": "AI artifact save location (read-only)",
+    "about": "About"
+  },
+  "setup": {
+    "welcome": "Welcome to ClawWork",
+    "desc1": "AI artifacts will be saved to the workspace directory,",
+    "desc2": "and version-controlled automatically via Git.",
+    "workspaceDir": "Workspace Directory",
+    "selectDir": "Select directory\u2026",
+    "browse": "Browse\u2026",
+    "initializing": "Initializing\u2026",
+    "getStarted": "Get Started",
+    "errSelectDir": "Please select a workspace directory",
+    "errInitFailed": "Initialization failed"
+  },
+  "rightPanel": {
+    "context": "Context",
+    "progress": "Progress",
+    "artifacts": "Artifacts",
+    "noProgress": "No progress info yet",
+    "xOfYCompleted": "{{done}}/{{total}} completed",
+    "noCommits": "No commits yet"
+  },
+  "fileBrowser": {
+    "searchFiles": "Search files\u2026",
+    "allTasks": "All Tasks",
+    "sortByDate": "By date",
+    "sortByName": "By name",
+    "sortByType": "By type"
+  },
+  "search": {
+    "tasks": "Tasks",
+    "messages": "Messages",
+    "files": "Files",
+    "noResults": "No results found"
+  },
+  "contextMenu": {
+    "markCompleted": "Mark Completed",
+    "archive": "Archive",
+    "reactivate": "Reactivate"
+  },
+  "connection": {
+    "connected": "Connected",
+    "connecting": "Connecting\u2026",
+    "disconnected": "Disconnected",
+    "gatewayDown": "Gateway down"
+  },
+  "filePreview": {
+    "goToSource": "Go to source message",
+    "cannotPreview": "Cannot preview this file type"
+  },
+  "errors": {
+    "requestFailed": "Request failed"
+  },
+  "chatInput": {
+    "describeTask": "Describe your task\u2026",
+    "offlineReadOnly": "Offline \u2014 read-only",
+    "createTaskFirst": "Create a task first\u2026",
+    "poweredBy": "Powered by OpenClaw \u00b7 Task files auto-archived via Git",
+    "offlineHint": "Offline \u2014 browse past tasks and files"
+  },
+  "dialog": {
+    "selectWorkspaceDir": "Select Workspace Directory"
+  }
+}

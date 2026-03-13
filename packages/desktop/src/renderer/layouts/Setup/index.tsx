@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { FolderOpen, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { motion as motionPresets } from '@/styles/design-tokens'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ interface SetupProps {
 }
 
 export default function Setup({ onSetupComplete }: SetupProps) {
+  const { t } = useTranslation()
   const [path, setPath] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -28,7 +30,7 @@ export default function Setup({ onSetupComplete }: SetupProps) {
 
   const handleSetup = async (): Promise<void> => {
     if (!path.trim()) {
-      setError('请选择工作空间目录')
+      setError(t('setup.errSelectDir'))
       return
     }
     setLoading(true)
@@ -38,7 +40,7 @@ export default function Setup({ onSetupComplete }: SetupProps) {
     if (result.ok) {
       onSetupComplete()
     } else {
-      setError(result.error ?? '初始化失败')
+      setError(result.error ?? t('setup.errInitFailed'))
     }
   }
 
@@ -56,18 +58,18 @@ export default function Setup({ onSetupComplete }: SetupProps) {
               </div>
             </div>
             <h1 className="text-2xl font-semibold text-[var(--text-primary)] tracking-tight">
-              欢迎使用 ClawWork
+              {t('setup.welcome')}
             </h1>
             <p className="text-[var(--text-muted)] leading-relaxed text-sm">
-              AI 产物将保存到工作空间目录，
+              {t('setup.desc1')}
               <br />
-              并通过 Git 自动版本管理。
+              {t('setup.desc2')}
             </p>
           </div>
 
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 shadow-[var(--shadow-elevated)] space-y-4">
             <label className="font-medium text-[var(--text-secondary)] text-sm">
-              工作空间目录
+              {t('setup.workspaceDir')}
             </label>
             <div className="flex gap-2">
               <input
@@ -80,7 +82,7 @@ export default function Setup({ onSetupComplete }: SetupProps) {
                   'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
                   'outline-none focus:border-[var(--border-accent)] transition-colors',
                 )}
-                placeholder="选择目录…"
+                placeholder={t('setup.selectDir')}
               />
               <Button
                 variant="outline"
@@ -88,7 +90,7 @@ export default function Setup({ onSetupComplete }: SetupProps) {
                 className="titlebar-no-drag gap-1.5 h-10"
               >
                 <FolderOpen size={15} />
-                浏览…
+                {t('setup.browse')}
               </Button>
             </div>
           </div>
@@ -101,10 +103,10 @@ export default function Setup({ onSetupComplete }: SetupProps) {
             {loading ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                初始化中…
+                {t('setup.initializing')}
               </>
             ) : (
-              '开始使用'
+              t('setup.getStarted')
             )}
           </Button>
 

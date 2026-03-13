@@ -1,4 +1,5 @@
 import { useRef, useCallback, type KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { Send } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,6 +11,7 @@ import { useMessageStore } from '../stores/messageStore';
 import { useUiStore } from '../stores/uiStore';
 
 export default function ChatInput() {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const activeTask = useTaskStore((s) =>
     s.tasks.find((t) => t.id === s.activeTaskId),
@@ -67,10 +69,10 @@ export default function ChatInput() {
 
   const disabled = !activeTask || isOffline;
   const placeholder = isOffline
-    ? '\u79BB\u7EBF\u6A21\u5F0F \u2014 \u53EA\u8BFB'
+    ? t('chatInput.offlineReadOnly')
     : !activeTask
-      ? '\u8BF7\u5148\u521B\u5EFA\u4E00\u4E2A\u4EFB\u52A1\u2026'
-      : '\u63CF\u8FF0\u4F60\u7684\u4EFB\u52A1\u2026';
+      ? t('chatInput.createTaskFirst')
+      : t('chatInput.describeTask');
 
   return (
     <div className="flex-shrink-0 px-6 pb-5">
@@ -114,8 +116,8 @@ export default function ChatInput() {
         </div>
         <p className="text-xs text-[var(--text-muted)] text-center mt-2.5 tracking-wide">
           {isOffline
-            ? '\u79BB\u7EBF\u6A21\u5F0F \u2014 \u53EF\u6D4F\u89C8\u5386\u53F2\u4EFB\u52A1\u548C\u6587\u4EF6'
-            : '\u7531 OpenClaw \u9A71\u52A8 \u00B7 \u4EFB\u52A1\u6587\u4EF6\u81EA\u52A8 Git \u5F52\u6863'}
+            ? t('chatInput.offlineHint')
+            : t('chatInput.poweredBy')}
         </p>
       </div>
     </div>

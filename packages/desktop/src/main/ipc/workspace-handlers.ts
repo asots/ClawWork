@@ -27,7 +27,7 @@ export function registerWorkspaceHandlers(): void {
 
     const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory', 'createDirectory'],
-      title: '选择工作空间目录',
+      title: 'Select Workspace Directory',
       defaultPath: getDefaultWorkspacePath(),
     });
 

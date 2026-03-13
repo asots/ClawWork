@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type MouseEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Plus, Search, FolderOpen, Settings } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useTaskStore } from '@/stores/taskStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useTaskContextMenu } from '@/components/ContextMenu'
@@ -18,6 +19,7 @@ import ConnectionStatus from './ConnectionStatus'
 import type { TaskStatus } from '@clawwork/shared'
 
 export default function LeftNav() {
+  const { t } = useTranslation()
   const tasks = useTaskStore((s) => s.tasks)
   const activeTaskId = useTaskStore((s) => s.activeTaskId)
   const createTask = useTaskStore((s) => s.createTask)
@@ -70,7 +72,7 @@ export default function LeftNav() {
     <div className="flex flex-col h-full pt-14 relative">
       <div className="px-4 pb-3 space-y-2 flex-shrink-0">
         <Button variant="soft" onClick={createTask} className="titlebar-no-drag w-full gap-2">
-          <Plus size={16} /> 新任务
+          <Plus size={16} /> {t('common.newTask')}
         </Button>
         <div className="titlebar-no-drag relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -78,7 +80,7 @@ export default function LeftNav() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索任务…"
+            placeholder={t('leftNav.searchTasks')}
             className="w-full h-9 pl-9 pr-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--border-accent)] transition-colors"
           />
         </div>
@@ -110,7 +112,7 @@ export default function LeftNav() {
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]',
               )}
             >
-              <FolderOpen size={16} className="opacity-60" /> 文件管理
+              <FolderOpen size={16} className="opacity-60" /> {t('common.fileManager')}
             </button>
           </div>
 
@@ -118,28 +120,28 @@ export default function LeftNav() {
             <div className="space-y-0.5">
               {visibleTasks.length === 0 && (
                 <p className="text-xs text-[var(--text-muted)] text-center py-8">
-                  点击「新任务」开始
+                  {t('leftNav.emptyHint')}
                 </p>
               )}
               {activeTasks.length > 0 && (
                 <>
                   <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] px-3 py-2">
-                    进行中 ({activeTasks.length})
+                    {t('common.inProgress')} ({activeTasks.length})
                   </p>
-                  {activeTasks.map((t) => (
-                    <TaskItem key={t.id} task={t} active={t.id === activeTaskId}
-                      onContextMenu={(e) => handleContextMenu(e, t.id, t.status)} />
+                  {activeTasks.map((task) => (
+                    <TaskItem key={task.id} task={task} active={task.id === activeTaskId}
+                      onContextMenu={(e) => handleContextMenu(e, task.id, task.status)} />
                   ))}
                 </>
               )}
               {completedTasks.length > 0 && (
                 <>
                   <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] px-3 py-2 mt-3">
-                    已完成 ({completedTasks.length})
+                    {t('common.completed')} ({completedTasks.length})
                   </p>
-                  {completedTasks.map((t) => (
-                    <TaskItem key={t.id} task={t} active={t.id === activeTaskId}
-                      onContextMenu={(e) => handleContextMenu(e, t.id, t.status)} />
+                  {completedTasks.map((task) => (
+                    <TaskItem key={task.id} task={task} active={task.id === activeTaskId}
+                      onContextMenu={(e) => handleContextMenu(e, task.id, task.status)} />
                   ))}
                 </>
               )}
@@ -161,10 +163,10 @@ export default function LeftNav() {
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]',
               )}
             >
-              <Settings size={16} className="opacity-60" /> 设置
+              <Settings size={16} className="opacity-60" /> {t('common.settings')}
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right">应用设置</TooltipContent>
+          <TooltipContent side="right">{t('leftNav.appSettings')}</TooltipContent>
         </Tooltip>
       </div>
 

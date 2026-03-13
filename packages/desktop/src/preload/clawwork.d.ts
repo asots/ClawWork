@@ -18,6 +18,7 @@ interface GatewayEvent {
 interface AppSettings {
   workspacePath: string;
   theme?: 'dark' | 'light';
+  language?: 'en' | 'zh';
   gatewayUrl?: string;
   bootstrapToken?: string;
   password?: string;

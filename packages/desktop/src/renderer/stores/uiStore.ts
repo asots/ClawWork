@@ -1,8 +1,11 @@
 import { create } from 'zustand';
+import i18n from '../i18n';
 
 type MainView = 'chat' | 'files';
 
 type Theme = 'dark' | 'light';
+
+export type Language = 'en' | 'zh';
 
 type GatewayConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
@@ -19,6 +22,9 @@ interface UiState {
 
   theme: Theme;
   setTheme: (theme: Theme) => void;
+
+  language: Language;
+  setLanguage: (lang: Language) => void;
 
   gatewayStatus: GatewayConnectionStatus;
   setGatewayStatus: (status: GatewayConnectionStatus) => void;
@@ -42,6 +48,13 @@ export const useUiStore = create<UiState>((set) => ({
 
   theme: 'dark',
   setTheme: (theme) => set({ theme }),
+
+  language: 'en',
+  setLanguage: (lang) => {
+    i18n.changeLanguage(lang);
+    set({ language: lang });
+    window.clawwork.updateSettings({ language: lang });
+  },
 
   gatewayStatus: 'connecting',
   setGatewayStatus: (status) => set({ gatewayStatus: status }),

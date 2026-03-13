@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { parseTaskIdFromSessionKey } from '@clawwork/shared';
 import { toast } from 'sonner';
+import i18n from '../i18n';
 import { useMessageStore } from '../stores/messageStore';
 import { useTaskStore } from '../stores/taskStore';
 import { useUiStore } from '../stores/uiStore';
@@ -83,7 +84,7 @@ export function useGatewayEventDispatcher(): void {
         store.setProcessing(taskId, false);
         store.finalizeStream(taskId);
         if (state === 'error') {
-          const errText = extractText(payload) || '请求出错';
+          const errText = extractText(payload) || i18n.t('errors.requestFailed');
           store.addMessage(taskId, 'system', errText);
         }
       }

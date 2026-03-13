@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import { X, ExternalLink, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { Artifact } from '@clawwork/shared';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,7 @@ function langFromName(name: string): string {
 }
 
 export default function FilePreview({ artifact, onClose, onNavigateToTask }: FilePreviewProps) {
+  const { t } = useTranslation();
   const [content, setContent] = useState<string | null>(null);
   const [encoding, setEncoding] = useState<'utf-8' | 'base64'>('utf-8');
   const [loading, setLoading] = useState(true);
@@ -77,7 +79,7 @@ export default function FilePreview({ artifact, onClose, onNavigateToTask }: Fil
             variant="ghost"
             size="icon-sm"
             onClick={() => onNavigateToTask(artifact.taskId, artifact.messageId)}
-            title="跳转到源消息"
+            title={t('filePreview.goToSource')}
           >
             <ExternalLink size={14} />
           </Button>
@@ -117,6 +119,8 @@ function PreviewContent({ content, encoding, mimeType, name }: {
   mimeType: string;
   name: string;
 }) {
+  const { t } = useTranslation();
+
   if (isImage(mimeType) && encoding === 'base64') {
     return (
       <div className="flex items-center justify-center">
@@ -157,7 +161,7 @@ function PreviewContent({ content, encoding, mimeType, name }: {
 
   return (
     <p className="text-sm text-[var(--text-muted)] text-center py-8">
-      无法预览此文件类型 ({mimeType})
+      {t('filePreview.cannotPreview')} ({mimeType})
     </p>
   );
 }

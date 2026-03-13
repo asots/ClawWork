@@ -1,0 +1,97 @@
+{
+  "common": {
+    "newTask": "\u65b0\u4efb\u52a1",
+    "completed": "\u5df2\u5b8c\u6210",
+    "inProgress": "\u8fdb\u884c\u4e2d",
+    "settings": "\u8bbe\u7f6e",
+    "fileManager": "\u6587\u4ef6\u7ba1\u7406",
+    "noFiles": "\u6682\u65e0\u6587\u4ef6",
+    "justNow": "\u521a\u521a",
+    "notConfigured": "\u672a\u914d\u7f6e",
+    "noTitle": "(\u65e0\u6807\u9898)"
+  },
+  "leftNav": {
+    "searchTasks": "\u641c\u7d22\u4efb\u52a1\u2026",
+    "emptyHint": "\u70b9\u51fb\u300c\u65b0\u4efb\u52a1\u300d\u5f00\u59cb",
+    "appSettings": "\u5e94\u7528\u8bbe\u7f6e"
+  },
+  "mainArea": {
+    "welcomeSubtitle": "AI-powered task execution",
+    "welcomeDesc1": "\u63cf\u8ff0\u4f60\u7684\u4efb\u52a1\uff0cAI \u5c06\u5e2e\u4f60\u89c4\u5212\u5e76\u6267\u884c\u3002",
+    "welcomeDesc2": "\u8fc7\u7a0b\u4e2d\u4ea7\u751f\u7684\u6587\u4ef6\u4f1a\u81ea\u52a8\u5f52\u6863\u7ba1\u7406\u3002",
+    "toggleContextPanel": "\u5207\u6362\u4e0a\u4e0b\u6587\u9762\u677f"
+  },
+  "settings": {
+    "appearance": "\u5916\u89c2",
+    "theme": "\u4e3b\u9898",
+    "connection": "\u8fde\u63a5",
+    "gatewayUrl": "Gateway \u5730\u5740",
+    "tokenPlaceholder": "\u7559\u7a7a\u4f7f\u7528\u9ed8\u8ba4 Token",
+    "saveAndReconnect": "\u4fdd\u5b58\u5e76\u91cd\u8fde",
+    "storage": "\u5b58\u50a8",
+    "workspace": "\u5de5\u4f5c\u7a7a\u95f4",
+    "workspaceHint": "AI \u4ea7\u7269\u4fdd\u5b58\u4f4d\u7f6e\uff08\u53ea\u8bfb\uff09",
+    "about": "\u5173\u4e8e"
+  },
+  "setup": {
+    "welcome": "\u6b22\u8fce\u4f7f\u7528 ClawWork",
+    "desc1": "AI \u4ea7\u7269\u5c06\u4fdd\u5b58\u5230\u5de5\u4f5c\u7a7a\u95f4\u76ee\u5f55\uff0c",
+    "desc2": "\u5e76\u901a\u8fc7 Git \u81ea\u52a8\u7248\u672c\u7ba1\u7406\u3002",
+    "workspaceDir": "\u5de5\u4f5c\u7a7a\u95f4\u76ee\u5f55",
+    "selectDir": "\u9009\u62e9\u76ee\u5f55\u2026",
+    "browse": "\u6d4f\u89c8\u2026",
+    "initializing": "\u521d\u59cb\u5316\u4e2d\u2026",
+    "getStarted": "\u5f00\u59cb\u4f7f\u7528",
+    "errSelectDir": "\u8bf7\u9009\u62e9\u5de5\u4f5c\u7a7a\u95f4\u76ee\u5f55",
+    "errInitFailed": "\u521d\u59cb\u5316\u5931\u8d25"
+  },
+  "rightPanel": {
+    "context": "\u4e0a\u4e0b\u6587",
+    "progress": "\u8fdb\u5ea6",
+    "artifacts": "\u4ea7\u7269",
+    "noProgress": "\u6682\u65e0\u8fdb\u5ea6\u4fe1\u606f",
+    "xOfYCompleted": "{{done}}/{{total}} \u5df2\u5b8c\u6210",
+    "noCommits": "\u6682\u65e0\u63d0\u4ea4"
+  },
+  "fileBrowser": {
+    "searchFiles": "\u641c\u7d22\u6587\u4ef6\u2026",
+    "allTasks": "\u5168\u90e8\u4efb\u52a1",
+    "sortByDate": "\u6309\u65f6\u95f4",
+    "sortByName": "\u6309\u540d\u79f0",
+    "sortByType": "\u6309\u7c7b\u578b"
+  },
+  "search": {
+    "tasks": "\u4efb\u52a1",
+    "messages": "\u6d88\u606f",
+    "files": "\u6587\u4ef6",
+    "noResults": "\u672a\u627e\u5230\u7ed3\u679c"
+  },
+  "contextMenu": {
+    "markCompleted": "\u6807\u8bb0\u5b8c\u6210",
+    "archive": "\u5f52\u6863",
+    "reactivate": "\u91cd\u65b0\u6fc0\u6d3b"
+  },
+  "connection": {
+    "connected": "\u5df2\u8fde\u63a5",
+    "connecting": "\u8fde\u63a5\u4e2d\u2026",
+    "disconnected": "\u672a\u8fde\u63a5",
+    "gatewayDown": "Gateway \u65ad\u5f00"
+  },
+  "filePreview": {
+    "goToSource": "\u8df3\u8f6c\u5230\u6e90\u6d88\u606f",
+    "cannotPreview": "\u65e0\u6cd5\u9884\u89c8\u6b64\u6587\u4ef6\u7c7b\u578b"
+  },
+  "errors": {
+    "requestFailed": "\u8bf7\u6c42\u51fa\u9519"
+  },
+  "chatInput": {
+    "describeTask": "\u63cf\u8ff0\u4f60\u7684\u4efb\u52a1\u2026",
+    "offlineReadOnly": "\u79bb\u7ebf\u6a21\u5f0f \u2014 \u53ea\u8bfb",
+    "createTaskFirst": "\u8bf7\u5148\u521b\u5efa\u4e00\u4e2a\u4efb\u52a1\u2026",
+    "poweredBy": "\u7531 OpenClaw \u9a71\u52a8 \u00b7 \u4efb\u52a1\u6587\u4ef6\u81ea\u52a8 Git \u5f52\u6863",
+    "offlineHint": "\u79bb\u7ebf\u6a21\u5f0f \u2014 \u53ef\u6d4f\u89c8\u5386\u53f2\u4efb\u52a1\u548c\u6587\u4ef6"
+  },
+  "dialog": {
+    "selectWorkspaceDir": "\u9009\u62e9\u5de5\u4f5c\u7a7a\u95f4\u76ee\u5f55"
+  }
+}

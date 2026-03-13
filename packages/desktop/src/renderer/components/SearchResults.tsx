@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { MessageSquare, FileText, FolderOpen } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
@@ -22,10 +23,10 @@ const ICON_MAP = {
   artifact: FileText,
 } as const
 
-const LABEL_MAP = {
-  task: '任务',
-  message: '消息',
-  artifact: '文件',
+const LABEL_KEYS = {
+  task: 'search.tasks',
+  message: 'search.messages',
+  artifact: 'search.files',
 } as const
 
 const listItem = {
@@ -49,6 +50,8 @@ function highlightSnippet(text: string): React.ReactNode[] {
 }
 
 export default function SearchResults({ results, onSelect }: SearchResultsProps) {
+  const { t } = useTranslation()
+
   const grouped = {
     task: results.filter((r) => r.type === 'task'),
     message: results.filter((r) => r.type === 'message'),
@@ -56,13 +59,13 @@ export default function SearchResults({ results, onSelect }: SearchResultsProps)
   }
 
   const sections = (['task', 'message', 'artifact'] as const).filter(
-    (t) => grouped[t].length > 0,
+    (type) => grouped[type].length > 0,
   )
 
   if (sections.length === 0) {
     return (
       <div className="px-4 py-6 text-center text-sm text-[var(--text-muted)]">
-        未找到结果
+        {t('search.noResults')}
       </div>
     )
   }
@@ -73,7 +76,7 @@ export default function SearchResults({ results, onSelect }: SearchResultsProps)
         {sections.map((type) => (
           <div key={type}>
             <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] px-2 pb-1">
-              {LABEL_MAP[type]} ({grouped[type].length})
+              {t(LABEL_KEYS[type])} ({grouped[type].length})
             </p>
             {grouped[type].map((result, idx) => {
               const Icon = ICON_MAP[result.type]
@@ -95,7 +98,7 @@ export default function SearchResults({ results, onSelect }: SearchResultsProps)
                   />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-[var(--text-primary)] truncate">
-                      {result.title || '(无标题)'}
+                      {result.title || t('common.noTitle')}
                     </p>
                     <p className="text-xs text-[var(--text-secondary)] truncate mt-0.5">
                       {highlightSnippet(result.snippet)}
