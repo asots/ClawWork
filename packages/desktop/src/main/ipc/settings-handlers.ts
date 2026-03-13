@@ -2,6 +2,13 @@ import { ipcMain } from 'electron';
 import { readConfig, updateConfig } from '../workspace/config.js';
 import type { AppConfig } from '../workspace/config.js';
 import { getGatewayClient } from '../ws/index.js';
+import type { GatewayAuth } from '@clawwork/shared';
+
+function buildAuth(config: AppConfig): GatewayAuth | undefined {
+  if (config.bootstrapToken) return { token: config.bootstrapToken };
+  if (config.password) return { password: config.password };
+  return undefined;
+}
 
 export function registerSettingsHandlers(): void {
   ipcMain.handle('settings:get', (): AppConfig | null => {
@@ -13,10 +20,11 @@ export function registerSettingsHandlers(): void {
     (_event, partial: Partial<AppConfig>): { ok: boolean; config: AppConfig } => {
       const config = updateConfig(partial);
 
-      if (partial.gatewayUrl) {
+      const needsReconnect = partial.gatewayUrl || partial.bootstrapToken || partial.password;
+      if (needsReconnect) {
         const gateway = getGatewayClient();
-        if (gateway) {
-          gateway.updateUrl(partial.gatewayUrl);
+        if (gateway && config.gatewayUrl) {
+          gateway.updateConfig(config.gatewayUrl, buildAuth(config));
         }
       }
 

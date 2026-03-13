@@ -42,8 +42,9 @@ export class GatewayClient {
     this.auth = config.auth;
   }
 
-  updateUrl(url: string): void {
+  updateConfig(url: string, auth?: GatewayAuth): void {
     this.wsUrl = url;
+    if (auth) this.auth = auth;
     this.reconnectAttempts = 0;
     this.connect();
   }
