@@ -1,10 +1,13 @@
 <div align="center">
 
-<img src="./docs/screenshot.png" alt="ClawWork" width="800" />
+<table border="0" cellspacing="0" cellpadding="0"><tr>
+<td><img src="./docs/screenshot.png" alt="ClawWork Desktop" height="420" /></td>
+<td><img src="https://github.com/user-attachments/assets/3dd775d0-8441-45d9-92f5-19e843f793c4" alt="ClawWork PWA" height="420" /></td>
+</tr></table>
 
 # ClawWork
 
-**A desktop workspace for [OpenClaw](https://github.com/openclaw/openclaw).**
+**A workspace for [OpenClaw](https://github.com/openclaw/openclaw) — desktop and mobile.**
 
 Parallel tasks, structured artifacts, scheduled automation — and files you can actually find later.
 
