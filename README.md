@@ -47,7 +47,7 @@ brew install --cask clawwork
 
 ### Releases
 
-Prebuilt macOS and Windows builds are available on the [Releases page](https://github.com/clawwork-ai/clawwork/releases/latest). The app updates itself — new versions download in the background and install when you quit.
+Prebuilt macOS, Windows, and Linux builds are available on the [Releases page](https://github.com/clawwork-ai/clawwork/releases/latest). The app updates itself — new versions download in the background and install when you quit.
 
 ### PWA (browser)
 
@@ -139,6 +139,9 @@ packages/desktop/
   src/preload/         — typed window.clawwork bridge
   src/renderer/        — React UI: components, layouts, stores, hooks, i18n
 packages/pwa/          — Progressive Web App (browser + mobile)
+docs/                  — design docs, architecture invariants
+e2e/                   — Playwright E2E tests (smoke + gateway integration)
+scripts/               — build and check scripts
 website/               — project website (React + Vite)
 keynote/               — presentation slides (Slidev)
 ```
@@ -172,10 +175,10 @@ Electron 34, React 19, TypeScript, Tailwind CSS v4, Zustand, SQLite (Drizzle ORM
 - Tray, quick launch, and voice input
 - Gateway server version display
 - PWA with offline support and mobile UI ([cpwa.pages.dev](https://cpwa.pages.dev))
+- Linux packages (AppImage + deb)
 
 🔮 Next up:
 
-- Linux packages
 - Conversation branching
 - Artifact diff view
 - Custom themes
@@ -191,7 +194,7 @@ The project is early and moving fast. If you want to help:
 - Read [DEVELOPMENT.md](DEVELOPMENT.md) for setup and project structure
 - Check [Issues](https://github.com/clawwork-ai/clawwork/issues)
 - Open a [Pull Request](https://github.com/clawwork-ai/clawwork/pulls)
-- Run `pnpm check` before submitting — it gates lint, architecture checks, formatting, typecheck, and tests.
+- Run `pnpm check` before submitting — it gates lint, architecture, UI contract, renderer copy, i18n, dead code, formatting, typecheck, and tests.
 
 ## License
 
