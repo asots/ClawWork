@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import i18n from '../i18n';
+import { getLanguageConfig } from '../i18n/languages';
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
@@ -13,8 +14,7 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 ];
 
 function getRtf(): Intl.RelativeTimeFormat {
-  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en';
-  return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  return new Intl.RelativeTimeFormat(getLanguageConfig(i18n.language).intlLocale, { numeric: 'auto' });
 }
 
 export function formatRelativeTime(date: Date): string {
@@ -48,6 +48,6 @@ export function formatCost(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
-export const isMac = navigator.platform.toUpperCase().includes('MAC');
+const isMac = navigator.platform.toUpperCase().includes('MAC');
 
 export const modKey = isMac ? '⌘' : 'Ctrl';

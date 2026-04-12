@@ -1,0 +1,109 @@
+{
+  "agents": {
+    "empty": "暂无可用智能体",
+    "selectTitle": "选择智能体"
+  },
+  "app": {
+    "error": "出现错误",
+    "loading": "加载中...",
+    "name": "ClawWork",
+    "paired": "移动设备已配对",
+    "reload": "重新加载"
+  },
+  "chat": {
+    "abortButton": "停止",
+    "assistant": "助手",
+    "assistantMessage": "助手消息",
+    "authorizationPending": "等待授权中...",
+    "emptyState": "选择一个任务或创建新任务",
+    "inputPlaceholder": "输入消息...",
+    "mainArea": "聊天",
+    "sendButton": "发送",
+    "systemMessage": "系统消息",
+    "thinking": "思考中...",
+    "userMessage": "你的消息",
+    "virtualizedList": "聊天记录"
+  },
+  "debugLog": {
+    "clearLog": "清除日志",
+    "close": "关闭",
+    "copyLog": "复制日志",
+    "empty": "暂无事件",
+    "reconnect": "重新连接",
+    "title": "网关日志"
+  },
+  "drawer": {
+    "closeButton": "关闭菜单",
+    "menuButton": "打开菜单",
+    "newTaskButton": "新建任务",
+    "search": "搜索",
+    "settings": "设置",
+    "signOut": "退出登录",
+    "signOutConfirm": "确定退出？所有本地数据将被清除。",
+    "title": "导航菜单"
+  },
+  "errors": {
+    "agentNotResponding": "Agent 未响应 — 可能不可用或服务端配置有误，请尝试其他 Agent",
+    "failed": "失败",
+    "requestFailed": "请求出错",
+    "sendFailed": "发送失败",
+    "serverAborted": "任务被服务端中止",
+    "stage": {
+      "final": "完成",
+      "lifecycle": "Agent",
+      "persist": "持久化",
+      "send": "发送",
+      "stream": "推流",
+      "sync": "同步"
+    },
+    "unknown": "未知错误"
+  },
+  "gateway": {
+    "connected": "已连接",
+    "connecting": "连接中...",
+    "disconnected": "未连接",
+    "statusLabel": "网关连接状态"
+  },
+  "pairing": {
+    "cameraError": "相机权限被拒绝",
+    "cancelButton": "取消",
+    "instruction": "扫码后，请在桌面端批准此设备，然后手机端即可连接。",
+    "invalidQr": "无效的二维码",
+    "loadingCamera": "正在启动相机...",
+    "scanButton": "扫描二维码",
+    "scannerUnsupported": "此浏览器不支持二维码扫描",
+    "subtitle": "扫描桌面应用上显示的二维码以开始",
+    "videoError": "无法启动相机"
+  },
+  "qrScanner": {
+    "scanFrameLabel": "二维码扫描区域",
+    "videoLabel": "二维码扫描取景框"
+  },
+  "settings": {
+    "applyUpdate": "有可用更新 — 点击安装",
+    "checking": "检查中...",
+    "checkUpdate": "检查更新",
+    "darkMode": "深色模式",
+    "language": "语言",
+    "lightMode": "浅色模式",
+    "updateFailed": "检查更新失败",
+    "updateUnavailable": "暂不支持更新",
+    "upToDate": "已是最新版本",
+    "version": "版本 {{version}}"
+  },
+  "shell": {
+    "reconnect": "重新连接"
+  },
+  "tasks": {
+    "empty": "暂无任务",
+    "navigationLabel": "任务列表",
+    "newTask": "新任务",
+    "older": "更早",
+    "thisWeek": "本周",
+    "today": "今天",
+    "yesterday": "昨天"
+  },
+  "tools": {
+    "emptyDetails": "暂无详情"
+  }
+}

@@ -1,9 +1,6 @@
 import { create } from 'zustand';
 import type { Artifact } from '@clawwork/shared';
 
-const EMPTY_ARTIFACTS: Artifact[] = [];
-export { EMPTY_ARTIFACTS };
-
 type SortBy = 'date' | 'name' | 'type';
 
 export interface ArtifactSearchResult {
@@ -15,7 +12,6 @@ export interface ArtifactSearchResult {
   mimeType: string;
   size: number;
   createdAt: string;
-  gitSha: string;
   filePath: string;
   messageId: string;
   contentSnippet?: string;

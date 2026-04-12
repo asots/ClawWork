@@ -13,7 +13,9 @@ export type DebugDomain =
   | 'artifact'
   | 'debug'
   | 'tray'
-  | 'quick-launch';
+  | 'quick-launch'
+  | 'updater'
+  | 'avatar';
 
 export interface DebugError {
   name?: string;

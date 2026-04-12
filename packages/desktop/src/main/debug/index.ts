@@ -31,8 +31,6 @@ function broadcastDebugEvent(event: DebugEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     try {
       win.webContents.send('debug-event', event);
-    } catch {
-      // ignore broadcast failures for windows closing during dispatch
-    }
+    } catch {}
   }
 }

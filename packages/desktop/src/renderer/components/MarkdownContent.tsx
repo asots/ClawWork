@@ -66,7 +66,7 @@ function CopyActionButton({ label, copiedLabel, text, className }: CopyActionBut
       aria-label={copied ? copiedLabel : label}
       title={copied ? copiedLabel : label}
       className={cn(
-        'h-7 w-7 rounded-md border border-[var(--border)] bg-[var(--bg-secondary)]/90 backdrop-blur-sm',
+        'h-7 w-7 rounded-md border-none bg-transparent shadow-none',
         'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
         className,
       )}
@@ -114,10 +114,10 @@ function SaveActionButton({ className, onSave }: SaveActionButtonProps) {
       size="icon-sm"
       disabled={state === 'saving'}
       className={cn(
-        'h-7 w-7 rounded-md border border-[var(--border)] bg-[var(--bg-secondary)]/90 backdrop-blur-sm',
+        'h-7 w-7 rounded-md border-none bg-transparent shadow-none',
         'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
         state === 'saved' && 'text-[var(--accent)]',
-        state === 'error' && 'text-red-400',
+        state === 'error' && 'text-[var(--danger)]',
         className,
       )}
       onClick={(event) => {
@@ -161,7 +161,7 @@ export default function MarkdownContent({
             rehypePlugins={[...REHYPE_PLUGINS]}
             components={{
               table: ({ children }: ComponentPropsWithoutRef<'table'>) => (
-                <div className="overflow-x-auto my-2">
+                <div className="my-2 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]">
                   <table>{children}</table>
                 </div>
               ),
@@ -169,8 +169,8 @@ export default function MarkdownContent({
                 <a
                   href={href}
                   onClick={(e) => {
+                    e.preventDefault();
                     if (href && /^https?:\/\//.test(href)) {
-                      e.preventDefault();
                       window.open(href, '_blank');
                     }
                   }}
@@ -217,7 +217,7 @@ export default function MarkdownContent({
                 return (
                   <div className="group/code relative max-w-full">
                     {lang && (
-                      <span className="absolute left-3 top-2.5 text-xs text-[var(--text-muted)] select-none pointer-events-none">
+                      <span className="type-support pointer-events-none absolute left-3 top-2.5 select-none text-[var(--text-muted)]">
                         {lang}
                       </span>
                     )}

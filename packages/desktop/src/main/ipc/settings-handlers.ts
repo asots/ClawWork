@@ -1,23 +1,26 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 import { readConfig, updateConfig, writeConfig, buildGatewayAuth } from '../workspace/config.js';
 import type { AppConfig, GatewayServerConfig } from '../workspace/config.js';
 import { getGatewayClient, addGateway, removeGateway } from '../ws/index.js';
 import { GatewayClient } from '../ws/gateway-client.js';
+import { SUPPORTED_LANGUAGE_CODES } from '@clawwork/shared';
 import type { GatewayAuth } from '@clawwork/shared';
-
-function getMainWindow(): BrowserWindow | null {
-  const wins = BrowserWindow.getAllWindows();
-  return wins.length > 0 ? wins[0] : null;
-}
 
 export function registerSettingsHandlers(): void {
   ipcMain.handle('settings:get', (): AppConfig | null => {
-    return readConfig();
+    const config = readConfig();
+    if (config && process.env.NODE_ENV === 'development') config.devMode = true;
+    return config;
   });
 
   ipcMain.handle('settings:update', (_event, partial: Partial<AppConfig>): { ok: boolean; config: AppConfig } => {
-    // Strip gateway fields — must use dedicated gateway handlers
     const { gateways: _g, defaultGatewayId: _d, ...safePartial } = partial;
+    if (
+      safePartial.language !== undefined &&
+      !(SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(safePartial.language)
+    ) {
+      delete safePartial.language;
+    }
     const config = updateConfig(safePartial);
     return { ok: true, config };
   });
@@ -29,10 +32,7 @@ export function registerSettingsHandlers(): void {
       config.defaultGatewayId = gateway.id;
     }
     writeConfig(config);
-    const mainWindow = getMainWindow();
-    if (mainWindow) {
-      addGateway({ id: gateway.id, name: gateway.name, url: gateway.url, auth: buildGatewayAuth(gateway) }, mainWindow);
-    }
+    addGateway({ id: gateway.id, name: gateway.name, url: gateway.url, auth: buildGatewayAuth(gateway) });
     return { ok: true };
   });
 
@@ -84,12 +84,12 @@ export function registerSettingsHandlers(): void {
         return { ok: false, error: 'pairing-code test is not supported' };
       }
       const testAuth: GatewayAuth = auth.token
-        ? { token: auth.token }
+        ? { token: auth.token.trim() }
         : auth.password
-          ? { password: auth.password }
+          ? { password: auth.password.trim() }
           : { token: '' };
       const testClient = new GatewayClient(
-        { id: `test-${Date.now()}`, name: 'test', url, auth: testAuth },
+        { id: `test-${Date.now()}`, name: 'test', url: url.trim(), auth: testAuth },
         { noReconnect: true },
       );
       try {

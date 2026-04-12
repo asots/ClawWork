@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FolderOpen, Loader2, Server, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { motion as motionPresets } from '@/styles/design-tokens';
-import { Button } from '@/components/ui/button';
+import { motionDuration, motionEase, motion as motionPresets } from '@/styles/design-tokens';
 import logo from '@/assets/logo.png';
 import { parseGatewaySetupCode, validateGatewayForm, type GatewayAuthMode } from '@/lib/gateway-auth';
+import SectionCard from '@/components/semantic/SectionCard';
+import ToolbarButton from '@/components/semantic/ToolbarButton';
+import InlineNotice from '@/components/semantic/InlineNotice';
 
 interface SetupProps {
   onSetupComplete: () => void;
@@ -19,12 +21,10 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>(initialStep);
 
-  // Step 1: workspace
   const [path, setPath] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Step 2: gateway
   const [gwName, setGwName] = useState('Default Gateway');
   const [gwUrl, setGwUrl] = useState('ws://127.0.0.1:18789');
   const [gwAuthMode, setGwAuthMode] = useState<GatewayAuthMode>('token');
@@ -149,7 +149,7 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
     if (res.ok) {
       onSetupComplete();
     } else {
-      setError(res.error ?? 'Failed to add gateway');
+      setError(res.error ?? t('errors.failed'));
     }
   }, [gwAuthMode, gwName, gwUrl, gwToken, gwPassword, gwPairingCode, onSetupComplete, t]);
 
@@ -158,7 +158,7 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
   }, [onSetupComplete]);
 
   const inputClass = cn(
-    'titlebar-no-drag flex-1 h-10 px-3.5 rounded-lg',
+    'titlebar-no-drag flex-1 h-[var(--density-control-height-lg)] px-3.5 rounded-lg',
     'bg-[var(--bg-tertiary)] border border-[var(--border)]',
     'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
     'outline-none focus:border-[var(--border-accent)] transition-colors',
@@ -170,14 +170,13 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
 
       <div className="flex flex-col items-center justify-center w-full px-6">
         <motion.div {...motionPresets.slideUp} className="w-full max-w-lg space-y-8">
-          {/* Logo + title */}
           <div className="flex flex-col items-center text-center space-y-3">
             <div className="relative">
               <div className="absolute inset-0 scale-[2.5] rounded-full bg-[var(--accent)] opacity-[0.06] blur-2xl" />
               <img src={logo} alt="ClawWork" className="relative w-16 h-16 rounded-2xl shadow-[var(--glow-accent)]" />
             </div>
-            <h1 className="text-2xl font-semibold text-[var(--text-primary)] tracking-tight">{t('setup.welcome')}</h1>
-            <p className="text-[var(--text-muted)] leading-relaxed text-sm">
+            <h1 className="type-section-title text-[var(--text-primary)]">{t('setup.welcome')}</h1>
+            <p className="type-body leading-relaxed text-[var(--text-muted)]">
               {step === 'workspace' ? (
                 <>
                   {t('setup.desc1')}
@@ -190,16 +189,15 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
             </p>
           </div>
 
-          {/* Step indicator */}
           <div className="flex items-center justify-center gap-2">
             {(['workspace', 'gateway'] as const).map((s, i) => (
               <div key={s} className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5">
                   <div
                     className={cn(
-                      'w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors',
+                      'type-badge flex h-7 w-7 items-center justify-center rounded-full transition-colors',
                       step === s
-                        ? 'bg-[var(--accent)] text-black'
+                        ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
                         : s === 'workspace' && step === 'gateway'
                           ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
                           : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
@@ -209,7 +207,7 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
                   </div>
                   <span
                     className={cn(
-                      'text-xs font-medium',
+                      'type-support',
                       step === s ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]',
                     )}
                   >
@@ -228,7 +226,6 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
             ))}
           </div>
 
-          {/* Step content */}
           <AnimatePresence mode="wait">
             {step === 'workspace' ? (
               <motion.div
@@ -236,15 +233,19 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: motionDuration.moderate, ease: motionEase.standard }}
                 className="space-y-6"
               >
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 shadow-[var(--shadow-elevated)] space-y-4">
-                  <label className="font-medium text-[var(--text-secondary)] text-sm flex items-center gap-2">
-                    <FolderOpen size={15} className="text-[var(--text-muted)]" />
-                    {t('setup.workspaceDir')}
-                  </label>
-                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">{t('setup.workspaceExplain')}</p>
+                <SectionCard
+                  title={
+                    <span className="inline-flex items-center gap-2">
+                      <FolderOpen size={15} className="text-[var(--text-muted)]" />
+                      {t('setup.workspaceDir')}
+                    </span>
+                  }
+                  bodyClassName="space-y-4"
+                >
+                  <p className="type-support leading-relaxed text-[var(--text-muted)]">{t('setup.workspaceExplain')}</p>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -256,31 +257,27 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
                       className={inputClass}
                       placeholder={t('setup.selectDir')}
                     />
-                    <Button variant="outline" onClick={handleBrowse} className="titlebar-no-drag gap-1.5 h-10">
-                      <FolderOpen size={15} />
+                    <ToolbarButton
+                      variant="outline"
+                      onClick={handleBrowse}
+                      className="h-[var(--density-control-height-lg)]"
+                      icon={<FolderOpen size={15} />}
+                    >
                       {t('setup.browse')}
-                    </Button>
+                    </ToolbarButton>
                   </div>
-                  <p className="text-xs text-[var(--text-muted)] opacity-70">{t('setup.workspaceHint')}</p>
-                </div>
+                  <p className="type-support text-[var(--text-muted)] opacity-70">{t('setup.workspaceHint')}</p>
+                </SectionCard>
 
-                <Button
+                <ToolbarButton
                   onClick={handleWorkspaceNext}
                   disabled={loading || !path.trim()}
-                  className="titlebar-no-drag w-full h-11 gap-2"
+                  className="w-full h-11 justify-center gap-2"
+                  icon={loading ? <Loader2 size={16} className="animate-spin" /> : undefined}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      {t('setup.initializing')}
-                    </>
-                  ) : (
-                    <>
-                      {t('setup.next')}
-                      <ArrowRight size={16} />
-                    </>
-                  )}
-                </Button>
+                  {loading ? t('setup.initializing') : t('setup.next')}
+                  {!loading ? <ArrowRight size={16} /> : null}
+                </ToolbarButton>
               </motion.div>
             ) : (
               <motion.div
@@ -288,31 +285,39 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: motionDuration.moderate, ease: motionEase.standard }}
                 className="space-y-6"
               >
-                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 shadow-[var(--shadow-elevated)] space-y-4">
-                  <label className="font-medium text-[var(--text-secondary)] text-sm flex items-center gap-2">
-                    <Server size={15} className="text-[var(--text-muted)]" />
-                    {t('setup.gatewayConfig')}
-                  </label>
-                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">{t('setup.gatewayExplain')}</p>
+                <SectionCard
+                  title={
+                    <span className="inline-flex items-center gap-2">
+                      <Server size={15} className="text-[var(--text-muted)]" />
+                      {t('setup.gatewayConfig')}
+                    </span>
+                  }
+                  bodyClassName="space-y-4"
+                >
+                  <p className="type-support leading-relaxed text-[var(--text-muted)]">{t('setup.gatewayExplain')}</p>
                   <div>
-                    <label className="text-xs text-[var(--text-muted)] mb-1 block">{t('settings.gatewayName')}</label>
+                    <label className="type-label mb-1 block text-[var(--text-muted)]">
+                      {t('settings.gatewayName')}
+                    </label>
                     <input
                       type="text"
                       value={gwName}
                       onChange={(e) => setGwName(e.target.value)}
-                      placeholder="Default Gateway"
+                      placeholder={t('setup.defaultGatewayName')}
                       className={cn(inputClass, 'w-full')}
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-[var(--text-muted)] mb-1.5 block">{t('settings.authMethod')}</label>
+                    <label className="type-label mb-1.5 block text-[var(--text-muted)]">
+                      {t('settings.authMethod')}
+                    </label>
                     <div className="flex rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] p-0.5 gap-0.5 mb-2">
                       {(
                         [
-                          { mode: 'token', label: 'Token' },
+                          { mode: 'token', label: t('settings.token') },
                           { mode: 'password', label: t('settings.password') },
                           { mode: 'pairingCode', label: t('settings.pairingCode') },
                         ] as const
@@ -322,9 +327,9 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
                           type="button"
                           onClick={() => handleGwAuthModeChange(mode)}
                           className={cn(
-                            'titlebar-no-drag flex-1 h-7 text-xs font-medium rounded-md transition-colors',
+                            'titlebar-no-drag glow-focus flex-1 h-7 type-label rounded-md transition-colors',
                             gwAuthMode === mode
-                              ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm'
+                              ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-[var(--shadow-card)]'
                               : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
                           )}
                         >
@@ -335,7 +340,9 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
                   </div>
                   {gwAuthMode !== 'pairingCode' && (
                     <div>
-                      <label className="text-xs text-[var(--text-muted)] mb-1 block">{t('settings.gatewayUrl')}</label>
+                      <label className="type-label mb-1 block text-[var(--text-muted)]">
+                        {t('settings.gatewayUrl')}
+                      </label>
                       <input
                         type="text"
                         value={gwUrl}
@@ -343,14 +350,14 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
                           setGwUrl(e.target.value);
                           setTestResult(null);
                         }}
-                        placeholder="ws://127.0.0.1:18789"
+                        placeholder={t('setup.defaultGatewayUrl')}
                         className={cn(inputClass, 'w-full')}
                       />
-                      <p className="text-xs text-[var(--text-muted)] opacity-70 mt-1">{t('setup.urlHint')}</p>
+                      <p className="type-support text-[var(--text-muted)] opacity-70 mt-1">{t('setup.urlHint')}</p>
                     </div>
                   )}
                   <div>
-                    <label className="text-xs text-[var(--text-muted)] mb-1.5 block">
+                    <label className="type-label mb-1.5 block text-[var(--text-muted)]">
                       {gwAuthMode === 'pairingCode' ? t('settings.pairingCode') : t('settings.authMethod')}
                     </label>
                     <input
@@ -379,11 +386,11 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
                       className={cn(inputClass, 'w-full')}
                     />
                     {gwAuthMode === 'pairingCode' && gwUrl && gwUrl !== 'ws://127.0.0.1:18789' && (
-                      <p className="text-xs text-[var(--accent)] mt-1">
-                        ✓ {t('settings.setupCodeParsed')}: <span className="font-mono">{gwUrl}</span>
+                      <p className="type-support mt-1 text-[var(--accent)]">
+                        ✓ {t('settings.setupCodeParsed')}: <span className="type-mono-data">{gwUrl}</span>
                       </p>
                     )}
-                    <p className="text-xs text-[var(--text-muted)] opacity-70 mt-1">
+                    <p className="type-support text-[var(--text-muted)] opacity-70 mt-1">
                       {gwAuthMode === 'token'
                         ? t('setup.tokenHint')
                         : gwAuthMode === 'password'
@@ -394,52 +401,52 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
 
                   {gwAuthMode !== 'pairingCode' && (
                     <div className="flex items-center gap-2">
-                      <Button
+                      <ToolbarButton
                         variant="default"
                         onClick={handleTestGateway}
                         disabled={testing}
-                        className="titlebar-no-drag gap-1.5"
+                        className="justify-center"
+                        icon={testing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                       >
-                        {testing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                         {t('settings.testConnection')}
-                      </Button>
+                      </ToolbarButton>
                       {testResult === 'success' && (
-                        <span className="text-xs text-[var(--accent)] flex items-center gap-1">
+                        <span className="type-support flex items-center gap-1 text-[var(--accent)]">
                           <CheckCircle2 size={12} /> {t('settings.testSuccess')}
                         </span>
                       )}
                       {testResult === 'fail' && (
-                        <span className="text-xs text-[var(--danger)]">{t('settings.testFailed')}</span>
+                        <span className="type-support text-[var(--danger)]">{t('settings.testFailed')}</span>
                       )}
                     </div>
                   )}
-                </div>
+                </SectionCard>
 
                 <div className="flex gap-3">
-                  <Button
+                  <ToolbarButton
                     variant="outline"
                     onClick={() => setStep('workspace')}
-                    className="titlebar-no-drag h-11 gap-1.5"
+                    className="h-11"
+                    icon={<ArrowLeft size={16} />}
                   >
-                    <ArrowLeft size={16} />
                     {t('setup.back')}
-                  </Button>
-                  <Button onClick={handleFinish} disabled={saving} className="titlebar-no-drag flex-1 h-11 gap-2">
-                    {saving ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        {t('setup.initializing')}
-                      </>
-                    ) : gwAuthMode === 'pairingCode' ? (
-                      t('settings.startPairing')
-                    ) : (
-                      t('setup.getStarted')
-                    )}
-                  </Button>
+                  </ToolbarButton>
+                  <ToolbarButton
+                    onClick={handleFinish}
+                    disabled={saving}
+                    className="flex-1 h-11 justify-center gap-2"
+                    icon={saving ? <Loader2 size={16} className="animate-spin" /> : undefined}
+                  >
+                    {saving
+                      ? t('setup.initializing')
+                      : gwAuthMode === 'pairingCode'
+                        ? t('settings.startPairing')
+                        : t('setup.getStarted')}
+                  </ToolbarButton>
                 </div>
                 <button
                   onClick={handleSkipGateway}
-                  className="w-full text-center text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                  className="glow-focus type-support w-full text-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                 >
                   {t('setup.skipGateway')}
                 </button>
@@ -447,7 +454,7 @@ export default function Setup({ onSetupComplete, initialStep = 'workspace' }: Se
             )}
           </AnimatePresence>
 
-          {error && <p className="text-sm text-[var(--danger)] text-center">{error}</p>}
+          {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
         </motion.div>
       </div>
     </div>

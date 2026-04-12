@@ -7,16 +7,18 @@ import RightPanel from './layouts/RightPanel';
 import Setup from './layouts/Setup';
 import Settings from './layouts/Settings';
 import ApprovalDialog from './components/ApprovalDialog';
+import CommandPalette from './components/CommandPalette';
 import { useUiStore } from './stores/uiStore';
 import { useTaskStore } from './stores/taskStore';
-import { useMessageStore } from './stores/messageStore';
 import { useFileStore } from './stores/fileStore';
-import { useGatewayEventDispatcher } from './hooks/useGatewayDispatcher';
-import { useTheme } from './hooks/useTheme';
+import { composer } from './platform';
+import { useGatewayBootstrap } from './hooks/useGatewayBootstrap';
 import { useUpdateCheck } from './hooks/useUpdateCheck';
 import { useTraySync } from './hooks/useTraySync';
 import { cn } from '@/lib/utils';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { motionDuration, motionEase } from '@/styles/design-tokens';
+import AmbientShell from '@/components/ambient/AmbientShell';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -27,15 +29,12 @@ export default function App() {
   const mainView = useUiStore((s) => s.mainView);
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
-  const theme = useUiStore((s) => s.theme);
   const setMainView = useUiStore((s) => s.setMainView);
-  const focusSearch = useUiStore((s) => s.focusSearch);
+  const toggleCommandPalette = useUiStore((s) => s.toggleCommandPalette);
+  const commandPaletteOpen = useUiStore((s) => s.commandPaletteOpen);
   const startNewTask = useTaskStore((s) => s.startNewTask);
   const createTask = useTaskStore((s) => s.createTask);
   const setActiveTask = useTaskStore((s) => s.setActiveTask);
-  const updateTaskTitle = useTaskStore((s) => s.updateTaskTitle);
-  const addMessage = useMessageStore((s) => s.addMessage);
-  const setProcessing = useMessageStore((s) => s.setProcessing);
 
   const leftNavCollapsed = useUiStore((s) => s.leftNavCollapsed);
   const toggleLeftNavCollapsed = useUiStore((s) => s.toggleLeftNavCollapsed);
@@ -45,9 +44,9 @@ export default function App() {
   const setRightPanelWidth = useUiStore((s) => s.setRightPanelWidth);
   const leftNavShortcut = useUiStore((s) => s.leftNavShortcut);
   const rightPanelShortcut = useUiStore((s) => s.rightPanelShortcut);
+  const themeMode = useUiStore((s) => s.theme);
 
-  useGatewayEventDispatcher();
-  useTheme();
+  useGatewayBootstrap();
   useUpdateCheck();
   useTraySync();
 
@@ -78,28 +77,42 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    window.clawwork.isWorkspaceConfigured().then((configured) => {
-      if (configured) {
-        setReady(true);
-      } else {
+    window.clawwork
+      .isWorkspaceConfigured()
+      .then((configured) => {
+        if (configured) {
+          setReady(true);
+        } else {
+          setNeedsSetup(true);
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[App] isWorkspaceConfigured failed:', err);
         setNeedsSetup(true);
-      }
-    });
+      });
   }, []);
 
   useEffect(() => {
     if (!ready) return;
-    window.clawwork.getSettings().then((settings) => {
-      if (settings?.sendShortcut) {
-        useUiStore.setState({ sendShortcut: settings.sendShortcut });
-      }
-      if (settings?.leftNavShortcut) {
-        useUiStore.setState({ leftNavShortcut: settings.leftNavShortcut });
-      }
-      if (settings?.rightPanelShortcut) {
-        useUiStore.setState({ rightPanelShortcut: settings.rightPanelShortcut });
-      }
-    });
+    window.clawwork
+      .getSettings()
+      .then((settings) => {
+        if (settings?.sendShortcut) {
+          useUiStore.setState({ sendShortcut: settings.sendShortcut });
+        }
+        if (settings?.leftNavShortcut) {
+          useUiStore.setState({ leftNavShortcut: settings.leftNavShortcut });
+        }
+        if (settings?.rightPanelShortcut) {
+          useUiStore.setState({ rightPanelShortcut: settings.rightPanelShortcut });
+        }
+        if (settings?.devMode) {
+          useUiStore.setState({ devMode: true });
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[App] getSettings failed:', err);
+      });
   }, [ready]);
 
   const handleGlobalKeyDown = useCallback(
@@ -121,8 +134,7 @@ export default function App() {
 
       if (!e.shiftKey && e.code === 'KeyK') {
         e.preventDefault();
-        if (leftNavCollapsed) toggleLeftNavCollapsed();
-        focusSearch();
+        toggleCommandPalette();
         return;
       }
 
@@ -143,8 +155,7 @@ export default function App() {
     [
       startNewTask,
       setMainView,
-      focusSearch,
-      leftNavCollapsed,
+      toggleCommandPalette,
       leftNavShortcut,
       rightPanelShortcut,
       toggleLeftNavCollapsed,
@@ -164,44 +175,24 @@ export default function App() {
   useEffect(() => {
     return window.clawwork.onQuickLaunchSubmit((message) => {
       const task = createTask();
-      const title = message.slice(0, 30).replace(/\n/g, ' ').trim();
-      updateTaskTitle(task.id, title + (message.length > 30 ? '\u2026' : ''));
-      const pendingUserMessage = addMessage(task.id, 'user', message, undefined, { persist: false });
-      setProcessing(task.id, true);
-      window.clawwork
-        .sendMessage(task.gatewayId, task.sessionKey, message)
-        .then((result) => {
-          if (result && !result.ok) {
-            setProcessing(task.id, false);
-            return;
-          }
-          window.clawwork
-            .persistMessage({
-              id: pendingUserMessage.id,
-              taskId: pendingUserMessage.taskId,
-              role: pendingUserMessage.role,
-              content: pendingUserMessage.content,
-              timestamp: pendingUserMessage.timestamp,
-            })
-            .catch(() => {});
-        })
-        .catch(() => {
-          setProcessing(task.id, false);
-        });
+      composer.send(task.id, { content: message, titleHint: message });
     });
-  }, [createTask, updateTaskTitle, addMessage, setProcessing]);
+  }, [createTask]);
 
   useEffect(() => {
-    const cleanupNav = window.clawwork.onTrayNavigateTask((taskId) => {
+    const navigateToTask = (taskId: string): void => {
       setActiveTask(taskId);
       setSettingsOpen(false);
       setMainView('chat');
-    });
+    };
+    const cleanupNav = window.clawwork.onTrayNavigateTask(navigateToTask);
+    const cleanupNotification = window.clawwork.onNotificationNavigateTask(navigateToTask);
     const cleanupSettings = window.clawwork.onTrayOpenSettings(() => {
       setSettingsOpen(true);
     });
     return () => {
       cleanupNav();
+      cleanupNotification();
       cleanupSettings();
     };
   }, [setActiveTask, setSettingsOpen, setMainView]);
@@ -216,7 +207,7 @@ export default function App() {
           }}
         />
         <Toaster
-          theme={theme === 'auto' ? 'system' : theme}
+          theme={themeMode === 'auto' ? 'system' : themeMode}
           position="bottom-right"
           toastOptions={{
             style: {
@@ -234,13 +225,16 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
-        <div className="titlebar-drag fixed top-0 left-0 right-0 h-8 z-50" />
-
+      <AnimatePresence>{commandPaletteOpen && <CommandPalette />}</AnimatePresence>
+      <div
+        className="relative flex h-screen overflow-hidden bg-[var(--bg-primary)]"
+        style={{ backgroundImage: 'var(--bg-ambient)' }}
+      >
+        <AmbientShell />
         <motion.aside
           animate={{ width: leftNavCollapsed ? 52 : leftNavWidth }}
-          transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-          className={cn('flex-shrink-0 border-r border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden')}
+          transition={{ duration: motionDuration.moderate, ease: motionEase.standard }}
+          className={cn('glass-heavy noise relative flex-shrink-0 overflow-hidden z-[1] border-r-0')}
           style={{ minWidth: leftNavCollapsed ? 52 : 180 }}
         >
           <LeftNav />
@@ -248,32 +242,32 @@ export default function App() {
 
         {!leftNavCollapsed && (
           <div
-            className="w-1.5 flex-shrink-0 cursor-col-resize hover:bg-[var(--accent)]/20 transition-colors z-10"
+            className="group w-1.5 flex-shrink-0 cursor-col-resize z-10 -mx-[3px]"
             onMouseDown={(e) => startPanelDrag(e, leftNavWidth, setLeftNavWidth, 1)}
-          />
+          >
+            <div className="h-full w-px mx-auto bg-[var(--border)] group-hover:bg-[var(--accent)] transition-colors" />
+          </div>
         )}
 
-        <main className="flex-1 min-w-0 flex flex-col">
-          {settingsOpen ? (
-            <Settings onClose={() => setSettingsOpen(false)} />
-          ) : (
-            <MainArea onTogglePanel={toggleRightPanel} />
-          )}
+        <main className="relative flex-1 min-w-0 flex flex-col z-[1]">
+          {settingsOpen ? <Settings /> : <MainArea onTogglePanel={toggleRightPanel} />}
         </main>
 
         <AnimatePresence>
           {rightPanelOpen && !settingsOpen && mainView === 'chat' && (
             <>
               <div
-                className="w-1.5 flex-shrink-0 cursor-col-resize hover:bg-[var(--accent)]/20 transition-colors z-10"
+                className="group w-1.5 flex-shrink-0 cursor-col-resize z-10 -mx-[3px]"
                 onMouseDown={(e) => startPanelDrag(e, rightPanelWidth, setRightPanelWidth, -1)}
-              />
+              >
+                <div className="h-full w-px mx-auto bg-[var(--border)] group-hover:bg-[var(--accent)] transition-colors" />
+              </div>
               <motion.aside
                 initial={{ width: 0, opacity: 0 }}
                 animate={{ width: rightPanelWidth, opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                className={cn('flex-shrink-0 border-l border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden')}
+                transition={{ duration: motionDuration.moderate, ease: motionEase.standard }}
+                className={cn('glass-heavy noise relative flex-shrink-0 overflow-hidden z-[1] border-l-0')}
               >
                 <RightPanel />
               </motion.aside>
@@ -281,7 +275,7 @@ export default function App() {
           )}
         </AnimatePresence>
         <Toaster
-          theme={theme === 'auto' ? 'system' : theme}
+          theme={themeMode === 'auto' ? 'system' : themeMode}
           position="bottom-right"
           toastOptions={{
             style: {

@@ -1,9 +1,37 @@
-interface IpcResult {
-  ok: boolean;
-  result?: Record<string, unknown>;
-  error?: string;
-  pairingRequired?: boolean;
-}
+import type {
+  IpcResult as SharedIpcResult,
+  ChatAttachment as SharedChatAttachment,
+  Team,
+  TeamHubRegistry,
+  ApprovalDecision,
+  CronJob,
+  CronJobCreate,
+  CronJobPatch,
+  CronListParams,
+  CronListResult,
+  CronRunResult,
+  CronRunsParams,
+  CronStatusResult,
+  SkillInstallParams,
+  SkillInstallResult,
+  SkillSearchParams,
+  SkillSearchResult,
+  SkillDetailResult,
+  SkillUpdateParams,
+  SkillUpdateResult,
+  SkillBinsResult,
+  ConfigSnapshot,
+  ConfigSetParams,
+  ConfigPatchParams,
+  ConfigSetResult,
+  ConfigPatchResult,
+  ConfigSchemaResult,
+  ConfigSchemaLookupResult,
+  ParsedTeam,
+  AgentFileSet,
+} from '@clawwork/shared';
+
+type IpcResult<T = Record<string, unknown>> = SharedIpcResult<T>;
 
 interface ConnectionStatus {
   connected: boolean;
@@ -21,6 +49,7 @@ interface GatewayStatusEvent {
   gatewayId: string;
   connected: boolean;
   error?: string;
+  serverVersion?: string;
   reconnectAttempt?: number;
   maxAttempts?: number;
   gaveUp?: boolean;
@@ -56,7 +85,7 @@ export interface GatewayServerConfig {
 }
 
 interface GatewayStatusMap {
-  [gatewayId: string]: { connected: boolean; name: string; error?: string };
+  [gatewayId: string]: { connected: boolean; name: string; error?: string; serverVersion?: string };
 }
 
 interface GatewayListItem extends GatewayServerConfig {
@@ -74,10 +103,17 @@ interface QuickLaunchConfigResult {
   sendShortcut: string;
 }
 
+interface NotificationSettings {
+  taskComplete?: boolean;
+  approvalRequest?: boolean;
+  gatewayDisconnect?: boolean;
+}
+
 interface AppSettings {
   workspacePath: string;
   theme?: 'dark' | 'light' | 'auto';
-  language?: 'en' | 'zh';
+  density?: 'compact' | 'comfortable' | 'spacious';
+  language?: string;
   gateways: GatewayServerConfig[];
   defaultGatewayId?: string;
   sendShortcut?: 'enter' | 'cmdEnter';
@@ -90,8 +126,11 @@ interface AppSettings {
   };
   quickLaunch?: QuickLaunchSettings;
   trayEnabled?: boolean;
+  notifications?: NotificationSettings;
   leftNavShortcut?: 'Comma' | 'BracketLeft';
   rightPanelShortcut?: 'Period' | 'BracketRight';
+  devMode?: boolean;
+  teamHubRegistries?: Array<{ id: string; url: string; isOfficial: boolean }>;
 }
 
 export type VoicePermissionStatus = 'granted' | 'not-determined' | 'denied' | 'unsupported';
@@ -101,6 +140,23 @@ interface UpdateCheckResult {
   latestVersion: string;
   hasUpdate: boolean;
   releaseUrl: string;
+  releaseNotes?: string | null;
+}
+
+interface UpdateDownloadProgress {
+  percent: number;
+  bytesPerSecond: number;
+  transferred: number;
+  total: number;
+}
+
+interface UpdateDownloadedInfo {
+  version: string;
+}
+
+interface UpdateError {
+  message: string;
+  code: 'dev-not-supported' | 'network' | 'no-release-metadata' | 'signature' | 'unknown';
 }
 
 interface SearchResult {
@@ -123,6 +179,7 @@ interface PersistedTask {
   sessionId: string;
   title: string;
   status: string;
+  ensemble?: boolean;
   createdAt: string;
   updatedAt: string;
   tags: string[];
@@ -136,7 +193,11 @@ interface PersistedMessage {
   role: string;
   content: string;
   timestamp: string;
+  sessionKey?: string;
+  agentId?: string;
+  runId?: string;
   imageAttachments?: unknown[];
+  toolCalls?: unknown[];
 }
 
 interface DiscoveredSession {
@@ -167,14 +228,9 @@ interface ListResult<T> {
   error?: string;
 }
 
-interface ChatAttachment {
-  mimeType: string;
-  fileName: string;
-  content: string; // base64
-}
+type ChatAttachment = SharedChatAttachment;
 
 export interface ClawWorkAPI {
-  // Chat — all require gatewayId
   sendMessage: (
     gatewayId: string,
     sessionKey: string,
@@ -185,18 +241,44 @@ export interface ClawWorkAPI {
   listSessions: (gatewayId: string) => Promise<IpcResult>;
   abortChat: (gatewayId: string, sessionKey: string) => Promise<IpcResult>;
 
-  // Model / Agent / Session config
   listModels: (gatewayId: string) => Promise<IpcResult>;
   listAgents: (gatewayId: string) => Promise<IpcResult>;
+  createAgent: (
+    gatewayId: string,
+    params: { name: string; workspace: string; emoji?: string; avatar?: string },
+  ) => Promise<IpcResult>;
+  updateAgent: (
+    gatewayId: string,
+    params: {
+      agentId: string;
+      name?: string;
+      workspace?: string;
+      model?: string;
+      avatar?: string;
+    },
+  ) => Promise<IpcResult>;
+  deleteAgent: (gatewayId: string, params: { agentId: string; deleteFiles?: boolean }) => Promise<IpcResult>;
+  listAgentFiles: (gatewayId: string, agentId: string) => Promise<IpcResult>;
+  getAgentFile: (gatewayId: string, agentId: string, name: string) => Promise<IpcResult>;
+  setAgentFile: (gatewayId: string, agentId: string, name: string, content: string) => Promise<IpcResult>;
   patchSession: (gatewayId: string, sessionKey: string, patch: Record<string, unknown>) => Promise<IpcResult>;
   getToolsCatalog: (gatewayId: string, agentId?: string) => Promise<IpcResult>;
+  getSkillsStatus: (gatewayId: string, agentId?: string) => Promise<IpcResult>;
+  searchSkills: (gatewayId: string, params: SkillSearchParams) => Promise<IpcResult<SkillSearchResult>>;
+  getSkillDetail: (gatewayId: string, slug: string) => Promise<IpcResult<SkillDetailResult>>;
+  installSkill: (gatewayId: string, params: SkillInstallParams) => Promise<IpcResult<SkillInstallResult>>;
+  updateSkill: (gatewayId: string, params: SkillUpdateParams) => Promise<IpcResult<SkillUpdateResult>>;
+  getSkillBins: (gatewayId: string) => Promise<IpcResult<SkillBinsResult>>;
+  getConfig: (gatewayId: string) => Promise<IpcResult<ConfigSnapshot>>;
+  setConfig: (gatewayId: string, params: ConfigSetParams) => Promise<IpcResult<ConfigSetResult>>;
+  patchConfig: (gatewayId: string, params: ConfigPatchParams) => Promise<IpcResult<ConfigPatchResult>>;
+  getConfigSchema: (gatewayId: string) => Promise<IpcResult<ConfigSchemaResult>>;
+  lookupConfigSchema: (gatewayId: string, path: string) => Promise<IpcResult<ConfigSchemaLookupResult>>;
 
-  // Gateway status — returns map of all gateways
   gatewayStatus: () => Promise<GatewayStatusMap>;
   syncSessions: () => Promise<SyncResult>;
   listGateways: () => Promise<GatewayListItem[]>;
 
-  // Push events from main process
   onGatewayEvent: (callback: (data: GatewayEvent) => void) => () => void;
   onGatewayStatus: (callback: (status: GatewayStatusEvent) => void) => () => void;
   onDebugEvent: (callback: (event: DebugEvent) => void) => () => void;
@@ -214,11 +296,9 @@ export interface ClawWorkAPI {
     data?: Record<string, unknown>;
   }) => void;
 
-  // Data persistence
   loadTasks: () => Promise<ListResult<PersistedTask>>;
   loadMessages: (taskId: string) => Promise<ListResult<PersistedMessage>>;
 
-  // Artifacts
   saveArtifact: (params: {
     taskId: string;
     sourcePath: string;
@@ -239,8 +319,11 @@ export interface ClawWorkAPI {
   }) => Promise<IpcResult>;
   saveImageFromUrl: (params: { taskId: string; messageId: string; url: string; alt?: string }) => Promise<IpcResult>;
   searchArtifacts: (query: string) => Promise<IpcResult>;
+  openArtifactFile: (localPath: string) => Promise<IpcResult>;
+  showArtifactInFolder: (localPath: string) => Promise<IpcResult>;
+  exportSessionMarkdown: (taskId: string) => Promise<IpcResult>;
+  exportSessionMarkdownAs: (taskId: string) => Promise<IpcResult>;
 
-  // Workspace
   openWorkspaceFolder: () => Promise<void>;
   isWorkspaceConfigured: () => Promise<boolean>;
   getWorkspacePath: () => Promise<string | null>;
@@ -249,9 +332,9 @@ export interface ClawWorkAPI {
   setupWorkspace: (path: string) => Promise<IpcResult>;
   changeWorkspace: (path: string) => Promise<IpcResult>;
 
-  // Settings
   getSettings: () => Promise<AppSettings | null>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<{ ok: boolean; config: AppSettings }>;
+  rebuildMenu: () => Promise<void>;
   getMicrophonePermission: () => Promise<{ status: VoicePermissionStatus }>;
   requestMicrophonePermission: () => Promise<{ status: VoicePermissionStatus }>;
   checkWhisper: () => Promise<{
@@ -264,26 +347,29 @@ export interface ClawWorkAPI {
 
   reconnectGateway: (gatewayId: string) => Promise<IpcResult>;
 
-  // Gateway management
   addGateway: (gateway: GatewayServerConfig) => Promise<IpcResult>;
   removeGateway: (gatewayId: string) => Promise<IpcResult>;
   updateGateway: (gatewayId: string, partial: Partial<GatewayServerConfig>) => Promise<IpcResult>;
   setDefaultGateway: (gatewayId: string) => Promise<IpcResult>;
   testGateway: (url: string, auth: { token?: string; password?: string; pairingCode?: string }) => Promise<IpcResult>;
 
-  // Updates
+  getAppVersion: () => Promise<string>;
   checkForUpdates: () => Promise<UpdateCheckResult>;
+  downloadUpdate: () => Promise<{ ok: boolean; error?: string }>;
+  installUpdate: () => Promise<{ ok: boolean; error?: string }>;
+  onUpdateDownloadProgress: (callback: (progress: UpdateDownloadProgress) => void) => () => void;
+  onUpdateDownloaded: (callback: (info: UpdateDownloadedInfo) => void) => () => void;
+  onUpdateError: (callback: (error: UpdateError) => void) => () => void;
 
-  // Search
   globalSearch: (query: string) => Promise<SearchResponse>;
 
-  // Task persistence
   persistTask: (task: {
     id: string;
     sessionKey: string;
     sessionId: string;
     title: string;
     status: string;
+    ensemble?: boolean;
     model?: string;
     modelProvider?: string;
     thinkingLevel?: string;
@@ -301,12 +387,14 @@ export interface ClawWorkAPI {
     id: string;
     title?: string;
     status?: string;
+    ensemble?: boolean;
     model?: string;
     modelProvider?: string;
     thinkingLevel?: string;
     inputTokens?: number;
     outputTokens?: number;
     contextTokens?: number;
+    teamId?: string | null;
     updatedAt: string;
   }) => Promise<IpcResult>;
 
@@ -316,10 +404,41 @@ export interface ClawWorkAPI {
     role: string;
     content: string;
     timestamp: string;
+    sessionKey?: string;
+    agentId?: string;
+    runId?: string;
     imageAttachments?: unknown[];
+    toolCalls?: unknown[];
   }) => Promise<IpcResult>;
 
   deleteTask: (taskId: string) => Promise<IpcResult>;
+
+  persistRoom: (params: { taskId: string; status: string; conductorReady: boolean }) => Promise<IpcResult>;
+  loadRoom: (taskId: string) => Promise<{
+    ok: boolean;
+    room: { taskId: string; status: string; conductorReady: boolean } | null;
+    performers: Array<{
+      sessionKey: string;
+      taskId: string;
+      agentId: string;
+      agentName: string;
+      emoji: string | null;
+      verifiedAt: string;
+    }>;
+    error?: string;
+  }>;
+  persistPerformer: (params: {
+    taskId: string;
+    sessionKey: string;
+    agentId: string;
+    agentName: string;
+    emoji?: string;
+    verifiedAt: string;
+  }) => Promise<IpcResult>;
+  deleteRoom: (taskId: string) => Promise<IpcResult>;
+
+  listSessionsBySpawner: (gatewayId: string, spawnedBy: string) => Promise<IpcResult>;
+  createSession: (gatewayId: string, params: { key: string; agentId: string; message?: string }) => Promise<IpcResult>;
 
   getUsageStatus: (gatewayId: string) => Promise<IpcResult>;
   getUsageCost: (
@@ -328,7 +447,7 @@ export interface ClawWorkAPI {
   ) => Promise<IpcResult>;
   getSessionUsage: (gatewayId: string, sessionKey: string) => Promise<IpcResult>;
 
-  resolveExecApproval: (gatewayId: string, id: string, decision: string) => Promise<IpcResult>;
+  resolveExecApproval: (gatewayId: string, id: string, decision: ApprovalDecision) => Promise<IpcResult>;
 
   resetSession: (gatewayId: string, sessionKey: string, reason?: 'new' | 'reset') => Promise<IpcResult>;
   deleteSession: (gatewayId: string, sessionKey: string) => Promise<IpcResult>;
@@ -350,12 +469,56 @@ export interface ClawWorkAPI {
   selectContextFolder: () => Promise<IpcResult>;
   listContextFiles: (folders: string[], query?: string) => Promise<IpcResult>;
   readContextFile: (absolutePath: string, folders: string[]) => Promise<IpcResult>;
+  watchContextFolder: (folderPath: string) => Promise<IpcResult>;
+  unwatchContextFolder: (folderPath: string) => Promise<IpcResult>;
+  onContextFilesChanged: (callback: (folderPath: string) => void) => () => void;
 
   quickLaunchSubmit: (message: string) => void;
   quickLaunchHide: () => void;
   getQuickLaunchConfig: () => Promise<QuickLaunchConfigResult>;
   updateQuickLaunchConfig: (enabled: boolean, shortcut?: string) => Promise<boolean>;
   onQuickLaunchSubmit: (callback: (message: string) => void) => () => void;
+
+  sendNotification: (params: { title: string; body: string; taskId?: string }) => Promise<IpcResult>;
+  onNotificationNavigateTask: (callback: (taskId: string) => void) => () => void;
+
+  listCronJobs: (gatewayId: string, params?: CronListParams) => Promise<IpcResult<CronListResult>>;
+  getCronStatus: (gatewayId: string) => Promise<IpcResult<CronStatusResult>>;
+  addCronJob: (gatewayId: string, params: CronJobCreate) => Promise<IpcResult<CronJob>>;
+  updateCronJob: (gatewayId: string, jobId: string, patch: CronJobPatch) => Promise<IpcResult<CronJob>>;
+  removeCronJob: (gatewayId: string, jobId: string) => Promise<IpcResult>;
+  runCronJob: (gatewayId: string, jobId: string, mode?: 'due' | 'force') => Promise<IpcResult<CronRunResult>>;
+  listCronRuns: (gatewayId: string, params?: CronRunsParams) => Promise<IpcResult>;
+
+  listTeams: () => Promise<IpcResult<Team[]>>;
+  getTeam: (id: string) => Promise<IpcResult<Team | null>>;
+  persistTeam: (team: {
+    id: string;
+    name: string;
+    emoji?: string;
+    description?: string;
+    gatewayId: string;
+    source?: string;
+    version?: string;
+    hubSlug?: string;
+    agents: Array<{ agentId: string; role?: string; isManager?: boolean }>;
+    createdAt: string;
+    updatedAt: string;
+  }) => Promise<IpcResult>;
+  deleteTeam: (id: string) => Promise<IpcResult>;
+
+  saveAgentAvatar: (gatewayId: string, agentId: string, dataUrl: string) => Promise<IpcResult>;
+  deleteAgentAvatar: (gatewayId: string, agentId: string) => Promise<IpcResult>;
+  listLocalAvatars: (gatewayId: string) => Promise<IpcResult<{ result: string[] }>>;
+
+  hubListRegistries: () => Promise<IpcResult<TeamHubRegistry[]>>;
+  hubFetchRegistry: (id: string) => Promise<IpcResult<TeamHubRegistry>>;
+  hubAddRegistry: (url: string) => Promise<IpcResult<TeamHubRegistry>>;
+  hubRemoveRegistry: (id: string) => Promise<IpcResult>;
+  hubDownloadTeam: (
+    registryId: string,
+    slug: string,
+  ) => Promise<IpcResult<{ parsed: ParsedTeam; agentFiles: Record<string, AgentFileSet> }>>;
 }
 
 declare global {

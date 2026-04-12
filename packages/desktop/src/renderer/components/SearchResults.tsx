@@ -3,6 +3,7 @@ import { MessageSquare, FileText, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { motionDuration, motionEase } from '@/styles/design-tokens';
 
 export interface SearchResult {
   type: 'task' | 'message' | 'artifact';
@@ -32,8 +33,10 @@ const LABEL_KEYS = {
 const listItem = {
   initial: { opacity: 0, y: 4 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.15 },
+  transition: { duration: motionDuration.normal, ease: motionEase.standard },
 };
+
+const listItemStagger = motionDuration.fast / 3;
 
 function highlightSnippet(text: string): React.ReactNode[] {
   const parts = text.split(/(<<.*?>>)/g);
@@ -61,15 +64,15 @@ export default function SearchResults({ results, onSelect }: SearchResultsProps)
   const sections = (['task', 'message', 'artifact'] as const).filter((type) => grouped[type].length > 0);
 
   if (sections.length === 0) {
-    return <div className="px-4 py-6 text-center text-sm text-[var(--text-muted)]">{t('search.noResults')}</div>;
+    return <div className="type-body px-4 py-6 text-center text-[var(--text-muted)]">{t('search.noResults')}</div>;
   }
 
   return (
-    <ScrollArea className="max-h-[360px]">
+    <ScrollArea className="max-h-96">
       <div className="p-2 space-y-3">
         {sections.map((type) => (
           <div key={type}>
-            <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] px-2 pb-1">
+            <p className="type-meta px-2 pb-1 text-[var(--text-muted)]">
               {t(LABEL_KEYS[type])} ({grouped[type].length})
             </p>
             {grouped[type].map((result, idx) => {
@@ -78,18 +81,20 @@ export default function SearchResults({ results, onSelect }: SearchResultsProps)
                 <motion.button
                   key={result.id}
                   {...listItem}
-                  transition={{ ...listItem.transition, delay: idx * 0.03 }}
+                  transition={{ ...listItem.transition, delay: idx * listItemStagger }}
                   onClick={() => onSelect(result)}
                   className={cn(
                     'w-full flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left',
                     'transition-colors hover:bg-[var(--bg-hover)]',
-                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring-accent)]',
+                    'focus-visible:outline-none glow-focus',
                   )}
                 >
                   <Icon size={15} className="mt-0.5 flex-shrink-0 text-[var(--text-muted)]" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-[var(--text-primary)] truncate">{result.title || t('common.noTitle')}</p>
-                    <p className="text-xs text-[var(--text-secondary)] truncate mt-0.5">
+                    <p className="type-label truncate text-[var(--text-primary)]">
+                      {result.title || t('common.noTitle')}
+                    </p>
+                    <p className="type-support mt-0.5 truncate text-[var(--text-secondary)]">
                       {highlightSnippet(result.snippet)}
                     </p>
                   </div>

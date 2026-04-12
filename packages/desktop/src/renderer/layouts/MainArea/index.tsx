@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import ConnectionBanner from '@/components/ConnectionBanner';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
   PanelRightOpen,
   PanelRightClose,
@@ -8,23 +8,21 @@ import {
   ArchiveRestore,
   Search,
   MessageSquare,
-  Server,
-  Bot,
-  Cpu,
   ArrowUp,
   ArrowDown,
-  ChevronRight,
   DollarSign,
   RefreshCw,
   AlertTriangle,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { ToolCall } from '@clawwork/shared';
+import { parseAgentIdFromSessionKey } from '@clawwork/shared';
 import { useTaskStore } from '@/stores/taskStore';
-import { useMessageStore, EMPTY_MESSAGES } from '@/stores/messageStore';
+import { useMessageStore, EMPTY_MESSAGES, activeTurnToMessage } from '@/stores/messageStore';
 import { useUiStore } from '@/stores/uiStore';
+import { useRoomStore } from '@/stores/roomStore';
 import { cn, formatRelativeTime, formatTokenCount, formatCost } from '@/lib/utils';
-import { motion as motionPresets } from '@/styles/design-tokens';
+import WindowTitlebar from '@/components/semantic/WindowTitlebar';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -35,184 +33,148 @@ import ThinkingIndicator from '@/components/ThinkingIndicator';
 import ChatInput from '@/components/ChatInput';
 import ImageLightbox from '@/components/ImageLightbox';
 import FilePreviewModal from '@/components/FilePreviewModal';
+import EnsembleAgentBar from '@/components/EnsembleAgentBar';
 import FileBrowser from '../FileBrowser';
-import logo from '@/assets/logo.png';
+import CronPanel from '@/layouts/CronPanel';
+import TeamsPanel from '@/layouts/TeamsPanel';
 import { useUsageStore } from '@/stores/usageStore';
-import { fetchAgentsForGateway } from '@/hooks/useGatewayDispatcher';
+import DataTable, { type DataTableColumn } from '@/components/data-display/DataTable';
+import EmptyState from '@/components/semantic/EmptyState';
+import StatusTag from '@/components/semantic/StatusTag';
+import WelcomeScreen from './WelcomeScreen';
 
 const STICK_TO_BOTTOM_THRESHOLD_PX = 60;
-const EMPTY_TOOL_CALLS: ToolCall[] = [];
+const MAX_HEADER_TITLE_LENGTH = 120;
 
 interface MainAreaProps {
   onTogglePanel: () => void;
 }
 
-function WelcomeScreen() {
-  const { t } = useTranslation();
-  const gatewayInfoMap = useUiStore((s) => s.gatewayInfoMap);
-  const defaultGatewayId = useUiStore((s) => s.defaultGatewayId);
-  const agentCatalogByGateway = useUiStore((s) => s.agentCatalogByGateway);
-  const pendingNewTask = useTaskStore((s) => s.pendingNewTask);
-  const gateways = useMemo(() => Object.values(gatewayInfoMap), [gatewayInfoMap]);
-  const hasMultipleGw = gateways.length > 1;
-
-  const [selectedGwId, setSelectedGwId] = useState(
-    pendingNewTask?.gatewayId ?? defaultGatewayId ?? gateways[0]?.id ?? '',
-  );
-  const [selectedAgentId, setSelectedAgentId] = useState(pendingNewTask?.agentId ?? 'main');
-  const [gwExpanded, setGwExpanded] = useState(false);
-  const [agentExpanded, setAgentExpanded] = useState(false);
-
-  const gwAgents = agentCatalogByGateway[selectedGwId];
-  const agentCatalog = gwAgents?.agents ?? [];
-  const hasMultipleAgents = agentCatalog.length > 1;
-  useEffect(() => {
-    if (!selectedGwId) {
-      const fallback = defaultGatewayId ?? gateways[0]?.id ?? '';
-      if (fallback) setSelectedGwId(fallback);
-    }
-  }, [defaultGatewayId, gateways, selectedGwId]);
-
-  useEffect(() => {
-    if (selectedGwId) {
-      fetchAgentsForGateway(selectedGwId);
-    }
-  }, [selectedGwId]);
-
-  useEffect(() => {
-    if (gwAgents) {
-      setSelectedAgentId(gwAgents.defaultId);
-    } else {
-      setSelectedAgentId('main');
-    }
-  }, [gwAgents]);
-
-  useEffect(() => {
-    const prev = useTaskStore.getState().pendingNewTask;
-    if (prev?.gatewayId === selectedGwId && prev?.agentId === selectedAgentId) return;
-    useTaskStore.setState({
-      pendingNewTask: { gatewayId: selectedGwId, agentId: selectedAgentId },
-    });
-  }, [selectedGwId, selectedAgentId]);
-
-  const MAX_VISIBLE = 3;
-
-  const visibleGateways = gwExpanded ? gateways : gateways.slice(0, MAX_VISIBLE);
-  const hiddenGwCount = gateways.length - MAX_VISIBLE;
-  const visibleAgents = agentExpanded ? agentCatalog : agentCatalog.slice(0, MAX_VISIBLE);
-  const hiddenAgentCount = agentCatalog.length - MAX_VISIBLE;
-
-  return (
-    <motion.div
-      {...motionPresets.fadeIn}
-      className="flex flex-col items-center justify-center h-full text-center py-20"
-    >
-      <div className="relative mb-6">
-        <div className="absolute inset-0 scale-[2.5] rounded-full bg-[var(--accent)] opacity-[0.06] blur-2xl" />
-        <img src={logo} alt="ClawWork" className="relative w-16 h-16 rounded-2xl shadow-[var(--glow-accent)]" />
-      </div>
-      <h3 className="text-2xl font-semibold text-[var(--text-primary)] mb-1.5 tracking-tight">ClawWork</h3>
-      <p className="text-sm text-[var(--text-muted)] mb-6">{t('mainArea.welcomeSubtitle')}</p>
-      <p className="text-[var(--text-secondary)] max-w-sm leading-relaxed text-sm">
-        {t('mainArea.welcomeDesc1')}
-        <br />
-        {t('mainArea.welcomeDesc2')}
-      </p>
-
-      {hasMultipleGw && (
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          {visibleGateways.map((gw) => (
-            <button
-              key={gw.id}
-              onClick={() => {
-                setSelectedGwId(gw.id);
-                setGwExpanded(false);
-              }}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer',
-                'border',
-                gw.id === selectedGwId
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                  : 'border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)]',
-              )}
-            >
-              <Server size={12} />
-              <span className="max-w-[100px] truncate">{gw.name}</span>
-            </button>
-          ))}
-          {!gwExpanded && hiddenGwCount > 0 && (
-            <button
-              onClick={() => setGwExpanded(true)}
-              className="inline-flex items-center gap-0.5 px-2.5 py-1.5 rounded-full text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
-            >
-              +{hiddenGwCount}
-              <ChevronRight size={10} />
-            </button>
-          )}
-        </div>
-      )}
-
-      {hasMultipleAgents && (
-        <div className={cn('flex flex-wrap items-center justify-center gap-2', hasMultipleGw ? 'mt-3' : 'mt-6')}>
-          {visibleAgents.map((agent) => (
-            <button
-              key={agent.id}
-              onClick={() => {
-                setSelectedAgentId(agent.id);
-                setAgentExpanded(false);
-              }}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer',
-                'border',
-                agent.id === selectedAgentId
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                  : 'border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)]',
-              )}
-            >
-              {agent.identity?.emoji ? (
-                <span className="text-sm leading-none">{agent.identity.emoji}</span>
-              ) : (
-                <Bot size={12} />
-              )}
-              <span className="max-w-[100px] truncate">{agent.name ?? agent.id}</span>
-            </button>
-          ))}
-          {!agentExpanded && hiddenAgentCount > 0 && (
-            <button
-              onClick={() => setAgentExpanded(true)}
-              className="inline-flex items-center gap-0.5 px-2.5 py-1.5 rounded-full text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
-            >
-              +{hiddenAgentCount}
-              <ChevronRight size={10} />
-            </button>
-          )}
-        </div>
-      )}
-
-      <a
-        href="https://github.com/clawwork-ai/clawwork"
-        target="_blank"
-        rel="noreferrer"
-        className="mt-6 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
-      >
-        {t('mainArea.starOnGithub')} ⭐
-      </a>
-    </motion.div>
-  );
+interface ArchivedTaskRow {
+  id: string;
+  title: string;
+  gatewayName: string;
+  updatedAt: string;
 }
 
-function ChatHeader({ onTogglePanel }: { onTogglePanel: () => void }) {
+interface AssistantIdentity {
+  agentName?: string;
+  agentEmoji?: string;
+  localAvatarUrl?: string;
+  gatewayAvatarUrl?: string;
+  agentRoleLabel?: string;
+}
+
+function buildLocalAvatarUrl(gatewayId: string | undefined, agentId: string | undefined): string | undefined {
+  if (!gatewayId || !agentId) return undefined;
+  return `clawwork-avatar://${gatewayId}/${agentId}`;
+}
+
+function resolveAssistantIdentity({
+  task,
+  sessionKey,
+  agentId,
+  gatewayId,
+  performerBySessionKey,
+  performerByAgentId,
+  catalogAgentById,
+  conductorLabel,
+}: {
+  task?: { sessionKey: string; agentId?: string; ensemble?: boolean };
+  sessionKey?: string;
+  agentId?: string;
+  gatewayId?: string;
+  performerBySessionKey: Map<string, { sessionKey: string; agentId: string; agentName: string; emoji?: string }>;
+  performerByAgentId: Map<string, { sessionKey: string; agentId: string; agentName: string; emoji?: string }>;
+  catalogAgentById: Map<string, { id: string; name?: string; identity?: { emoji?: string; avatarUrl?: string } }>;
+  conductorLabel: string;
+}): AssistantIdentity {
+  const resolvedAgentId = agentId ?? (sessionKey ? parseAgentIdFromSessionKey(sessionKey) : undefined);
+  const conductorAgentId =
+    task?.agentId ?? (task?.sessionKey ? parseAgentIdFromSessionKey(task.sessionKey) : undefined);
+  const performer =
+    (sessionKey ? performerBySessionKey.get(sessionKey) : undefined) ??
+    (resolvedAgentId ? performerByAgentId.get(resolvedAgentId) : undefined);
+  const catalogEntry = resolvedAgentId ? catalogAgentById.get(resolvedAgentId) : undefined;
+  const conductorCatalogEntry = conductorAgentId ? catalogAgentById.get(conductorAgentId) : undefined;
+  const isConductor = Boolean(
+    task?.ensemble &&
+    ((sessionKey && sessionKey === task.sessionKey) ||
+      (!sessionKey && resolvedAgentId && conductorAgentId && resolvedAgentId === conductorAgentId)),
+  );
+
+  if (isConductor) {
+    const targetId = conductorAgentId ?? resolvedAgentId;
+    const agentName = conductorCatalogEntry?.name ?? catalogEntry?.name ?? conductorAgentId ?? conductorLabel;
+    return {
+      agentName,
+      agentEmoji: conductorCatalogEntry?.identity?.emoji ?? catalogEntry?.identity?.emoji,
+      localAvatarUrl: buildLocalAvatarUrl(gatewayId, targetId),
+      gatewayAvatarUrl: conductorCatalogEntry?.identity?.avatarUrl ?? catalogEntry?.identity?.avatarUrl,
+      agentRoleLabel: agentName === conductorLabel ? undefined : conductorLabel,
+    };
+  }
+
+  return {
+    agentName: performer?.agentName ?? catalogEntry?.name ?? resolvedAgentId,
+    agentEmoji: performer?.emoji ?? catalogEntry?.identity?.emoji,
+    localAvatarUrl: buildLocalAvatarUrl(gatewayId, resolvedAgentId),
+    gatewayAvatarUrl: catalogEntry?.identity?.avatarUrl,
+  };
+}
+
+function ChatHeader({
+  onTogglePanel,
+  messageLayout,
+  onToggleMessageLayout,
+}: {
+  onTogglePanel: () => void;
+  messageLayout: 'centered' | 'wide';
+  onToggleMessageLayout: () => void;
+}) {
   const { t } = useTranslation();
   const activeTask = useTaskStore((s) => s.tasks.find((task) => task.id === s.activeTaskId));
-  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
-  const gatewayInfoMap = useUiStore((s) => s.gatewayInfoMap);
-  const hasMultipleGateways = Object.keys(gatewayInfoMap).length > 1;
-  const gwInfo = activeTask ? gatewayInfoMap[activeTask.gatewayId] : undefined;
-  const agentInfo = useUiStore((s) =>
-    activeTask?.agentId && activeTask.agentId !== 'main'
-      ? s.agentCatalogByGateway[activeTask.gatewayId]?.agents.find((a) => a.id === activeTask.agentId)
-      : undefined,
+  const updateTaskTitle = useTaskStore((s) => s.updateTaskTitle);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  const startTitleEdit = useCallback(() => {
+    if (!activeTask) return;
+    setTitleDraft(activeTask.title);
+    setEditingTitle(true);
+    requestAnimationFrame(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    });
+  }, [activeTask]);
+
+  const commitTitleEdit = useCallback(() => {
+    const trimmed = titleDraft.trim().slice(0, MAX_HEADER_TITLE_LENGTH);
+    if (activeTask && trimmed && trimmed !== activeTask.title) {
+      updateTaskTitle(activeTask.id, trimmed);
+    }
+    setEditingTitle(false);
+  }, [titleDraft, activeTask, updateTaskTitle]);
+
+  const cancelTitleEdit = useCallback(() => {
+    setEditingTitle(false);
+  }, []);
+
+  const handleTitleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitTitleEdit();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelTitleEdit();
+      }
+    },
+    [commitTitleEdit, cancelTitleEdit],
   );
+  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
   const sessionUsage = useUsageStore((s) => s.sessionUsage);
   const cost = useUsageStore((s) => s.cost);
   const usageStatus = useUsageStore((s) => s.status);
@@ -232,342 +194,471 @@ function ChatHeader({ onTogglePanel }: { onTogglePanel: () => void }) {
   const outputTokens = sessionUsage?.output ?? activeTask?.outputTokens ?? null;
   const contextTokens = activeTask?.contextTokens ?? null;
   const sessionCost = sessionUsage?.totalCost ?? null;
-  const hasUsageData =
-    inputTokens != null ||
-    outputTokens != null ||
-    (contextTokens != null && contextTokens > 0) ||
-    (sessionCost != null && sessionCost > 0);
+  const contextUsagePercent =
+    contextTokens != null && contextTokens > 0 ? Math.round((contextTokens / 200_000) * 100) : null;
+  const hasInputSummary = inputTokens != null;
+  const hasOutputSummary = outputTokens != null;
+  const hasContextSummary = contextUsagePercent != null;
+  const hasCostSummary = sessionCost != null && sessionCost > 0;
+  const hasUsageData = hasInputSummary || hasOutputSummary || hasContextSummary || hasCostSummary;
 
   return (
-    <header className="titlebar-drag flex items-center justify-between h-12 px-5 border-b border-[var(--border)] flex-shrink-0 relative z-[51]">
+    <header className="titlebar-drag flex items-center justify-between px-5 h-[var(--density-toolbar-height)] border-b border-[var(--border)] flex-shrink-0">
       <div className="titlebar-no-drag flex items-center gap-2.5">
         {activeTask ? (
           <>
-            <h2 className="font-medium text-[var(--text-primary)] truncate">
-              {activeTask.title || t('common.newTask')}
-            </h2>
-            <span
-              className={cn(
-                'text-xs px-2 py-0.5 rounded-md',
-                activeTask.status === 'active'
-                  ? 'bg-[var(--accent-dim)] text-[var(--accent)]'
-                  : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]',
-              )}
-            >
-              {activeTask.status === 'active' ? t('common.inProgress') : t('common.completed')}
-            </span>
-            {hasMultipleGateways && gwInfo && (
+            {editingTitle ? (
+              <input
+                ref={titleInputRef}
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value.slice(0, MAX_HEADER_TITLE_LENGTH))}
+                onBlur={commitTitleEdit}
+                onKeyDown={handleTitleKeyDown}
+                maxLength={MAX_HEADER_TITLE_LENGTH}
+                className="type-label max-w-80 rounded border border-[var(--ring-accent)] bg-[var(--bg-primary)] px-1.5 py-0.5 text-[var(--text-primary)] outline-none"
+              />
+            ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span
-                    className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
-                    style={gwInfo.color ? { borderLeft: `2px solid ${gwInfo.color}` } : undefined}
+                  <h2
+                    className="type-section-title max-w-xl cursor-pointer truncate text-[var(--text-primary)]"
+                    onDoubleClick={startTitleEdit}
                   >
-                    <Server size={10} />
-                    <span className="max-w-[80px] truncate">{gwInfo.name}</span>
-                  </span>
+                    {activeTask.title || t('common.newTask')}
+                  </h2>
                 </TooltipTrigger>
-                <TooltipContent>{gwInfo.name}</TooltipContent>
+                <TooltipContent>{t('contextMenu.rename')}</TooltipContent>
               </Tooltip>
             )}
-            {agentInfo && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-                    {agentInfo.identity?.emoji ? (
-                      <span className="text-sm leading-none">{agentInfo.identity.emoji}</span>
-                    ) : (
-                      <Bot size={10} />
-                    )}
-                    <span className="max-w-[80px] truncate">{agentInfo.name ?? agentInfo.id}</span>
+          </>
+        ) : (
+          <h2 className="type-label text-[var(--text-muted)]">ClawWork</h2>
+        )}
+      </div>
+      <div className="titlebar-no-drag flex items-center gap-1">
+        {hasUsageData && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="type-meta inline-flex h-8 items-center gap-0 rounded-lg border border-[var(--border-subtle)] px-1 text-[var(--text-secondary)] hover:border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer">
+                {inputTokens != null && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5">
+                    <ArrowUp size={14} className="text-[var(--text-secondary)]" />
+                    {formatTokenCount(inputTokens)}
                   </span>
-                </TooltipTrigger>
-                <TooltipContent>{agentInfo.name ?? agentInfo.id}</TooltipContent>
-              </Tooltip>
-            )}
-            {activeTask?.model && (
-              <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
-                <Cpu size={10} />
-                <span className="max-w-[100px] truncate">{activeTask.model}</span>
-              </span>
-            )}
-            {hasUsageData && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-hover)] rounded px-1 py-0.5 transition-colors cursor-pointer">
-                    {inputTokens != null && (
-                      <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-[var(--bg-tertiary)]">
-                        <ArrowUp size={9} />
-                        {formatTokenCount(inputTokens)}
+                )}
+                {hasOutputSummary && (
+                  <>
+                    {hasInputSummary && <span className="h-3.5 w-px bg-[var(--border-subtle)]" />}
+                    <span className="inline-flex items-center gap-0.5 px-1.5">
+                      <ArrowDown size={14} className="text-[var(--text-secondary)]" />
+                      {formatTokenCount(outputTokens)}
+                    </span>
+                  </>
+                )}
+                {hasContextSummary && (
+                  <>
+                    {(hasInputSummary || hasOutputSummary) && <span className="h-3.5 w-px bg-[var(--border-subtle)]" />}
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-0.5 px-1.5',
+                        contextUsagePercent >= 90
+                          ? 'text-[var(--danger)]'
+                          : contextUsagePercent >= 70
+                            ? 'text-[var(--warning)]'
+                            : 'text-[var(--accent)]',
+                      )}
+                    >
+                      <span className="text-[var(--text-secondary)]">{t('rightPanel.contextUsage')}</span>
+                      {contextUsagePercent}%
+                    </span>
+                  </>
+                )}
+                {hasCostSummary && (
+                  <>
+                    {(hasInputSummary || hasOutputSummary || hasContextSummary) && (
+                      <span className="h-3.5 w-px bg-[var(--border-subtle)]" />
+                    )}
+                    <span className="inline-flex items-center gap-0.5 px-1.5 text-[var(--accent)]">
+                      <DollarSign size={14} className="text-[var(--text-secondary)]" />
+                      {formatCost(sessionCost)}
+                    </span>
+                  </>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 max-h-screen overflow-y-auto">
+              <div className="space-y-3">
+                {cost && (
+                  <div className="space-y-2">
+                    <div className="type-label text-[var(--text-secondary)]">
+                      {t('usage.period', { days: cost.days || 30 })}
+                    </div>
+                    <div className="type-meta flex h-8 w-full items-center gap-0 rounded-lg border border-[var(--border-subtle)] px-1 text-[var(--text-secondary)]">
+                      <span className="inline-flex min-w-0 flex-1 items-center gap-0.5 px-1.5 text-[var(--accent)]">
+                        <DollarSign size={14} className="text-[var(--text-secondary)]" />
+                        {formatCost(cost.totals.totalCost)}
                       </span>
-                    )}
-                    {outputTokens != null && (
-                      <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-[var(--bg-tertiary)]">
-                        <ArrowDown size={9} />
-                        {formatTokenCount(outputTokens)}
+                      <span className="h-3.5 w-px bg-[var(--border-subtle)]" />
+                      <span className="inline-flex min-w-0 flex-1 items-center gap-0.5 px-1.5">
+                        <ArrowUp size={14} className="text-[var(--text-secondary)]" />
+                        {formatTokenCount(cost.totals.input)}
                       </span>
-                    )}
-                    {contextTokens != null && contextTokens > 0 && (
-                      <span className="px-1 py-0.5 rounded bg-[var(--bg-tertiary)]">
-                        ctx {Math.round((contextTokens / 200_000) * 100)}%
+                      <span className="h-3.5 w-px bg-[var(--border-subtle)]" />
+                      <span className="inline-flex min-w-0 flex-1 items-center gap-0.5 px-1.5">
+                        <ArrowDown size={14} className="text-[var(--text-secondary)]" />
+                        {formatTokenCount(cost.totals.output)}
                       </span>
-                    )}
-                    {sessionCost != null && sessionCost > 0 && (
-                      <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--accent)]">
-                        <DollarSign size={9} />
-                        {formatCost(sessionCost)}
-                      </span>
-                    )}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 max-h-[70vh] overflow-y-auto">
-                  <div className="space-y-3">
-                    {sessionUsage && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-[var(--text-secondary)]">
-                            {t('usage.sessionCost')}
-                          </span>
-                          <span className="text-lg font-semibold text-[var(--accent)]">
-                            {formatCost(sessionUsage.totalCost)}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs text-[var(--text-muted)]">
-                          <div className="flex items-center gap-1">
-                            <ArrowUp size={10} />
-                            <span>
-                              {t('usage.inputTokens')}: {formatTokenCount(sessionUsage.input)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <ArrowDown size={10} />
-                            <span>
-                              {t('usage.outputTokens')}: {formatTokenCount(sessionUsage.output)}
-                            </span>
-                          </div>
-                          {sessionUsage.cacheRead > 0 && (
-                            <div>
-                              {t('usage.cacheRead')}: {formatTokenCount(sessionUsage.cacheRead)}
-                            </div>
-                          )}
-                          {sessionUsage.cacheWrite > 0 && (
-                            <div>
-                              {t('usage.cacheWrite')}: {formatTokenCount(sessionUsage.cacheWrite)}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-xs text-[var(--text-muted)]">
-                          {t('usage.totalTokens')}: {formatTokenCount(sessionUsage.totalTokens)}
-                        </div>
-                        {contextTokens != null && contextTokens > 0 && (
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
-                              <span>{t('rightPanel.contextUsage')}</span>
-                              <span>{Math.round((contextTokens / 200_000) * 100)}%</span>
-                            </div>
-                            <div className="h-1.5 rounded-full bg-[var(--bg-secondary)] overflow-hidden">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full transition-all duration-300',
-                                  contextTokens / 200_000 >= 0.9
-                                    ? 'bg-[var(--error)]'
-                                    : contextTokens / 200_000 >= 0.7
-                                      ? 'bg-[var(--warning)]'
-                                      : 'bg-[var(--accent)]',
-                                )}
-                                style={{ width: `${Math.min(100, (contextTokens / 200_000) * 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    </div>
+                  </div>
+                )}
 
-                    {cost && (
-                      <div className={cn('space-y-2', sessionUsage && 'border-t border-[var(--border)] pt-3')}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-[var(--text-secondary)]">
-                            {t('usage.instanceCost')}
-                          </span>
-                          <span className="text-sm font-semibold text-[var(--text-primary)]">
-                            {formatCost(cost.totals.totalCost)}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5 text-[10px] text-[var(--text-muted)]">
-                          <div>
-                            {t('usage.inputTokens')}: {formatTokenCount(cost.totals.input)}
-                          </div>
-                          <div>
-                            {t('usage.outputTokens')}: {formatTokenCount(cost.totals.output)}
-                          </div>
-                        </div>
-                        {cost.days > 0 && (
-                          <div className="text-[10px] text-[var(--text-muted)]">
-                            {t('usage.period', { days: cost.days })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {usageStatus && usageStatus.providers.length > 0 && (
-                      <div className="space-y-2 border-t border-[var(--border)] pt-3">
-                        <span className="text-xs font-medium text-[var(--text-secondary)]">
-                          {t('usage.rateLimits')}
-                        </span>
-                        {usageStatus.providers.map((provider) => (
-                          <div key={provider.provider} className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-[var(--text-primary)]">{provider.displayName}</span>
-                              {provider.plan && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent-dim)] text-[var(--accent)]">
-                                  {provider.plan}
-                                </span>
-                              )}
-                            </div>
-                            {provider.error && (
-                              <div className="text-[10px] text-[var(--error)] flex items-center gap-1">
-                                <AlertTriangle size={10} />
-                                {provider.error}
-                              </div>
-                            )}
-                            {provider.windows.map((w, i) => (
-                              <div key={i} className="space-y-0.5">
-                                <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
-                                  <span>{w.label}</span>
-                                  <span className={cn(w.usedPercent >= 90 && 'text-[var(--error)]')}>
-                                    {Math.round(w.usedPercent)}%
-                                  </span>
-                                </div>
-                                <div className="h-1 rounded-full bg-[var(--bg-secondary)] overflow-hidden">
-                                  <div
-                                    className={cn(
-                                      'h-full rounded-full transition-all duration-300',
-                                      w.usedPercent >= 90
-                                        ? 'bg-[var(--error)]'
-                                        : w.usedPercent >= 70
-                                          ? 'bg-[var(--warning)]'
-                                          : 'bg-[var(--accent)]',
-                                    )}
-                                    style={{ width: `${Math.min(100, w.usedPercent)}%` }}
-                                  />
-                                </div>
-                                {w.resetAt && (
-                                  <div className="text-[10px] text-[var(--text-muted)]">
-                                    {t('usage.resetsAt', { time: new Date(w.resetAt).toLocaleTimeString() })}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex justify-end border-t border-[var(--border)] pt-2">
+                {usageStatus && usageStatus.providers.length > 0 && (
+                  <div className="space-y-2 border-t border-[var(--border)] pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="type-label text-[var(--text-secondary)]">{t('usage.rateLimits')}</span>
                       <button
                         onClick={() => fetchUsage(costGatewayId, sessionKey || undefined)}
                         disabled={usageLoading}
-                        className="p-1 rounded hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer disabled:opacity-50"
+                        className="rounded p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-50"
                       >
                         <RefreshCw size={12} className={cn(usageLoading && 'animate-spin')} />
                       </button>
                     </div>
+                    {usageStatus.providers.map((provider) => (
+                      <div key={provider.provider} className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="type-support text-[var(--text-primary)]">{provider.displayName}</span>
+                          {provider.plan ? <StatusTag tone="accent">{provider.plan}</StatusTag> : null}
+                        </div>
+                        {provider.error && (
+                          <div className="type-meta flex items-center gap-1 text-[var(--danger)]">
+                            <AlertTriangle size={10} />
+                            {provider.error}
+                          </div>
+                        )}
+                        {provider.windows.map((w, i) => (
+                          <div key={i} className="space-y-0.5">
+                            <div className="type-meta flex items-center justify-between text-[var(--text-muted)]">
+                              <span>{w.label}</span>
+                              <span className={cn(w.usedPercent >= 90 && 'text-[var(--danger)]')}>
+                                {Math.round(w.usedPercent)}%
+                              </span>
+                            </div>
+                            <div className="h-1 rounded-full bg-[var(--bg-secondary)] overflow-hidden">
+                              <div
+                                className={cn(
+                                  'h-full rounded-full transition-all duration-300',
+                                  w.usedPercent >= 90
+                                    ? 'bg-[var(--danger)]'
+                                    : w.usedPercent >= 70
+                                      ? 'bg-[var(--warning)]'
+                                      : 'bg-[var(--accent)]',
+                                )}
+                                style={{ width: `${Math.min(100, w.usedPercent)}%` }}
+                              />
+                            </div>
+                            {w.resetAt && (
+                              <div className="type-meta text-[var(--text-muted)]">
+                                {t('usage.resetsAt', { time: new Date(w.resetAt).toLocaleTimeString() })}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
                   </div>
-                </PopoverContent>
-              </Popover>
-            )}
-          </>
-        ) : (
-          <h2 className="font-medium text-[var(--text-muted)]">ClawWork</h2>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
         )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={messageLayout === 'wide' ? 'secondary' : 'ghost'}
+              size="icon"
+              onClick={onToggleMessageLayout}
+            >
+              <ArrowLeftRight size={18} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {messageLayout === 'wide' ? t('mainArea.messageLayoutCentered') : t('mainArea.messageLayoutWide')}
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" onClick={onTogglePanel}>
+              {rightPanelOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('mainArea.toggleContextPanel')}</TooltipContent>
+        </Tooltip>
       </div>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" onClick={onTogglePanel} className="titlebar-no-drag">
-            {rightPanelOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{t('mainArea.toggleContextPanel')}</TooltipContent>
-      </Tooltip>
     </header>
   );
 }
 
 function ChatContent() {
+  const { t } = useTranslation();
   const activeTaskId = useTaskStore((s) => s.activeTaskId);
   const activeTask = useTaskStore((s) => s.tasks.find((task) => task.id === s.activeTaskId));
+  const activeRoom = useRoomStore((s) => (activeTaskId ? s.rooms[activeTaskId] : undefined));
+  const messageLayout = useUiStore((s) => s.messageLayout);
   const messages = useMessageStore((s) =>
     activeTaskId ? (s.messagesByTask[activeTaskId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES,
   );
-  const streamingContent = useMessageStore((s) => (activeTaskId ? (s.streamingByTask[activeTaskId] ?? '') : ''));
-  const streamingThinkingContent = useMessageStore((s) =>
-    activeTaskId ? (s.streamingThinkingByTask[activeTaskId] ?? '') : '',
-  );
+  const activeTurnBySession = useMessageStore((s) => s.activeTurnBySession);
+  const processingBySession = useMessageStore((s) => s.processingBySession);
   const highlightedId = useMessageStore((s) => s.highlightedMessageId);
   const setHighlightedMessage = useMessageStore((s) => s.setHighlightedMessage);
-  const isProcessing = useMessageStore((s) => (activeTaskId ? s.processingTasks.has(activeTaskId) : false));
-  const streamingToolCalls = useMessageStore((s) => {
-    if (!activeTaskId) return EMPTY_TOOL_CALLS;
-    const msgs = s.messagesByTask[activeTaskId];
-    if (!msgs?.length) return EMPTY_TOOL_CALLS;
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i].role === 'user') break;
-      if (msgs[i].role === 'assistant' && msgs[i].toolCalls.length > 0) {
-        return msgs[i].toolCalls.some((tc) => tc.status === 'running') ? msgs[i].toolCalls : EMPTY_TOOL_CALLS;
-      }
-    }
-    return EMPTY_TOOL_CALLS;
-  });
   const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  const isAutoScrolling = useRef(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const closeLightbox = useCallback(() => setLightboxSrc(null), []);
   const [previewFile, setPreviewFile] = useState<{ path: string; content: string } | null>(null);
   const closeFilePreview = useCallback(() => setPreviewFile(null), []);
   const handleHighlightDone = useCallback(() => setHighlightedMessage(null), [setHighlightedMessage]);
+  const sessionKeys = useMemo(() => {
+    if (!activeTask?.sessionKey) return [];
+    return [activeTask.sessionKey, ...(activeRoom?.performers.map((performer) => performer.sessionKey) ?? [])];
+  }, [activeRoom?.performers, activeTask?.sessionKey]);
+  const activeTurns = useMemo(
+    () =>
+      sessionKeys.reduce<Array<{ sessionKey: string; turn: (typeof activeTurnBySession)[string] }>>(
+        (items, sessionKey) => {
+          const turn = activeTurnBySession[sessionKey];
+          if (turn) items.push({ sessionKey, turn });
+          return items;
+        },
+        [],
+      ),
+    [activeTurnBySession, sessionKeys],
+  );
+  const isProcessing = useMemo(
+    () => sessionKeys.some((sessionKey) => processingBySession.has(sessionKey)),
+    [processingBySession, sessionKeys],
+  );
+  const timelineItems = useMemo(() => {
+    const messageItems = messages.map((message) => ({
+      key: message.id,
+      timestamp: message.timestamp,
+      kind: 'message' as const,
+      message,
+    }));
+    const turnItems = activeTurns.map(({ sessionKey, turn }) => ({
+      key: `turn-${sessionKey}-${turn.id}`,
+      timestamp: turn.timestamp,
+      kind: 'turn' as const,
+      sessionKey,
+      turn,
+    }));
+    return [...messageItems, ...turnItems].sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+  }, [activeTurns, messages]);
+  const performerBySessionKey = useMemo(
+    () => new Map((activeRoom?.performers ?? []).map((performer) => [performer.sessionKey, performer])),
+    [activeRoom?.performers],
+  );
+  const performerByAgentId = useMemo(
+    () => new Map((activeRoom?.performers ?? []).map((performer) => [performer.agentId, performer])),
+    [activeRoom?.performers],
+  );
+  const agentCatalog = useUiStore((s) =>
+    activeTask?.gatewayId ? s.agentCatalogByGateway[activeTask.gatewayId] : undefined,
+  );
+  const catalogAgentById = useMemo(
+    () => new Map((agentCatalog?.agents ?? []).map((a) => [a.id, a])),
+    [agentCatalog?.agents],
+  );
+  const hasRenderableActiveTurn = activeTurns.some(
+    ({ turn }) => turn.finalized || turn.streamingText || turn.streamingThinking || turn.toolCalls.length > 0,
+  );
+  const showWelcome = !activeTask || (messages.length === 0 && !hasRenderableActiveTurn);
+  const conductorLabel = t('chatMessage.conductor');
 
   const handleScroll = useCallback(() => {
+    if (isAutoScrolling.current) return;
     const el = viewportRef.current;
     if (!el) return;
-    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_THRESHOLD_PX;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_THRESHOLD_PX;
+    stickToBottom.current = atBottom;
+    setShowScrollButton(!atBottom);
   }, []);
 
   useEffect(() => {
-    if (!stickToBottom.current) return;
+    if (showWelcome) return;
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return;
+
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      if (!stickToBottom.current) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        isAutoScrolling.current = true;
+        viewport.scrollTop = viewport.scrollHeight;
+        requestAnimationFrame(() => {
+          isAutoScrolling.current = false;
+        });
+      });
+    });
+    ro.observe(content);
+
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [showWelcome]);
+
+  const scrollToBottom = useCallback(() => {
     const el = viewportRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, streamingContent, streamingThinkingContent, isProcessing, streamingToolCalls]);
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    stickToBottom.current = true;
+    setShowScrollButton(false);
+  }, []);
+
+  if (showWelcome) {
+    return (
+      <>
+        <div className="flex-1 px-5 pt-4 pb-0 overflow-y-auto">
+          <div
+            className={cn(
+              messageLayout === 'centered' ? 'max-w-[var(--content-max-width)] mx-auto' : 'w-full max-w-none',
+            )}
+          >
+            <WelcomeScreen key={activeTaskId ?? '__new'} />
+          </div>
+        </div>
+        <ChatInput />
+        <ImageLightbox src={lightboxSrc} onClose={closeLightbox} />
+        <FilePreviewModal file={previewFile} onClose={closeFilePreview} />
+      </>
+    );
+  }
 
   return (
     <>
-      <ScrollArea viewportRef={viewportRef} className="flex-1 px-6 py-4" onScrollCapture={handleScroll}>
-        <div className="max-w-3xl mx-auto space-y-1">
-          {!activeTask && <WelcomeScreen />}
-          {activeTask && messages.length === 0 && !streamingContent && !streamingThinkingContent && <WelcomeScreen />}
-          {messages.map((msg) => (
-            <ChatMessage
-              key={msg.id}
-              message={msg}
-              highlighted={msg.id === highlightedId}
-              onHighlightDone={handleHighlightDone}
-              onImageClick={setLightboxSrc}
-              onFileClick={setPreviewFile}
-            />
-          ))}
-          {(streamingContent || streamingThinkingContent || streamingToolCalls.length > 0) && (
-            <StreamingMessage
-              content={streamingContent}
-              thinkingContent={streamingThinkingContent || undefined}
-              toolCalls={streamingToolCalls}
-            />
-          )}
-          <AnimatePresence>
-            {isProcessing && !streamingContent && !streamingThinkingContent && streamingToolCalls.length === 0 && (
-              <ThinkingIndicator />
+      <div className="relative flex-1 min-h-0">
+        <ScrollArea viewportRef={viewportRef} className="h-full px-5 pt-4 pb-0" onScrollCapture={handleScroll}>
+          <div
+            ref={contentRef}
+            className={cn(
+              'space-y-3',
+              messageLayout === 'centered' ? 'max-w-[var(--content-max-width)] mx-auto' : 'w-full max-w-none',
             )}
-          </AnimatePresence>
-        </div>
-      </ScrollArea>
+          >
+            {timelineItems.map((item, index) => {
+              if (item.kind === 'message') {
+                const previous = index > 0 ? timelineItems[index - 1] : null;
+                const previousRole = previous?.kind === 'message' ? previous.message.role : 'assistant';
+                const identity =
+                  item.message.role === 'assistant'
+                    ? resolveAssistantIdentity({
+                        task: activeTask,
+                        sessionKey: item.message.sessionKey,
+                        agentId: item.message.agentId,
+                        gatewayId: activeTask?.gatewayId,
+                        performerBySessionKey,
+                        performerByAgentId,
+                        catalogAgentById,
+                        conductorLabel,
+                      })
+                    : undefined;
+                return (
+                  <div
+                    key={item.key}
+                    className={cn(index > 0 && item.message.role === 'user' && previousRole !== 'user' && 'pt-3')}
+                  >
+                    <ChatMessage
+                      message={item.message}
+                      agentName={identity?.agentName}
+                      agentEmoji={identity?.agentEmoji}
+                      localAvatarUrl={identity?.localAvatarUrl}
+                      gatewayAvatarUrl={identity?.gatewayAvatarUrl}
+                      agentRoleLabel={identity?.agentRoleLabel}
+                      highlighted={item.message.id === highlightedId}
+                      onHighlightDone={handleHighlightDone}
+                      onImageClick={setLightboxSrc}
+                      onFileClick={setPreviewFile}
+                    />
+                  </div>
+                );
+              }
+
+              if (item.turn.finalized && item.turn.content) {
+                const identity = resolveAssistantIdentity({
+                  task: activeTask,
+                  sessionKey: item.sessionKey,
+                  agentId: parseAgentIdFromSessionKey(item.sessionKey),
+                  gatewayId: activeTask?.gatewayId,
+                  performerBySessionKey,
+                  performerByAgentId,
+                  catalogAgentById,
+                  conductorLabel,
+                });
+                return (
+                  <ChatMessage
+                    key={item.key}
+                    message={activeTurnToMessage(item.turn, activeTaskId!, item.sessionKey)}
+                    agentName={identity.agentName}
+                    agentEmoji={identity.agentEmoji}
+                    localAvatarUrl={identity.localAvatarUrl}
+                    gatewayAvatarUrl={identity.gatewayAvatarUrl}
+                    agentRoleLabel={identity.agentRoleLabel}
+                    highlighted={false}
+                    onHighlightDone={handleHighlightDone}
+                    onImageClick={setLightboxSrc}
+                    onFileClick={setPreviewFile}
+                  />
+                );
+              }
+
+              if (item.turn.streamingText || item.turn.streamingThinking || item.turn.toolCalls.length > 0) {
+                const identity = resolveAssistantIdentity({
+                  task: activeTask,
+                  sessionKey: item.sessionKey,
+                  agentId: parseAgentIdFromSessionKey(item.sessionKey),
+                  gatewayId: activeTask?.gatewayId,
+                  performerBySessionKey,
+                  performerByAgentId,
+                  catalogAgentById,
+                  conductorLabel,
+                });
+                return (
+                  <StreamingMessage
+                    key={item.key}
+                    content={item.turn.streamingText}
+                    thinkingContent={item.turn.streamingThinking || undefined}
+                    toolCalls={item.turn.toolCalls}
+                    agentEmoji={identity.agentEmoji}
+                    localAvatarUrl={identity.localAvatarUrl}
+                    gatewayAvatarUrl={identity.gatewayAvatarUrl}
+                    agentName={identity.agentName}
+                    agentRoleLabel={identity.agentRoleLabel}
+                  />
+                );
+              }
+
+              return null;
+            })}
+            <AnimatePresence>{isProcessing && !hasRenderableActiveTurn && <ThinkingIndicator />}</AnimatePresence>
+          </div>
+        </ScrollArea>
+        {showScrollButton && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
+            style={{ boxShadow: 'var(--shadow-elevated)' }}
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
+        )}
+      </div>
       <ChatInput />
       <ImageLightbox src={lightboxSrc} onClose={closeLightbox} />
       <FilePreviewModal file={previewFile} onClose={closeFilePreview} />
@@ -595,7 +686,7 @@ function ArchivedTasks() {
     });
   }, [tasks, searchQuery, gwInfoMap]);
 
-  const totalArchived = useMemo(() => tasks.filter((task) => task.status === 'archived').length, [tasks]);
+  const totalArchived = tasks.filter((task) => task.status === 'archived').length;
 
   const handleReactivate = (taskId: string): void => {
     updateTaskStatus(taskId, 'active');
@@ -605,14 +696,75 @@ function ArchivedTasks() {
     setActiveTask(taskId);
     setMainView('chat');
   };
+  const rows: ArchivedTaskRow[] = archivedTasks.map((task) => ({
+    id: task.id,
+    title: task.title || t('common.noTitle'),
+    gatewayName: gwInfoMap[task.gatewayId]?.name ?? '-',
+    updatedAt: task.updatedAt,
+  }));
+  const columns: DataTableColumn<ArchivedTaskRow>[] = [
+    {
+      key: 'task',
+      header: t('common.task'),
+      kind: 'text',
+      width: '50%',
+      render: (row) => (
+        <div className="flex min-w-0 items-center gap-2">
+          <MessageSquare size={14} className="shrink-0 text-[var(--text-muted)] opacity-50" />
+          <span className="truncate text-[var(--text-primary)]">{row.title}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'gateway',
+      header: t('common.gateway'),
+      kind: 'text',
+      width: '24%',
+      render: (row) => <span className="block truncate">{row.gatewayName}</span>,
+    },
+    {
+      key: 'time',
+      header: t('common.time'),
+      kind: 'time',
+      width: '18%',
+      render: (row) => <span className="whitespace-nowrap">{formatRelativeTime(new Date(row.updatedAt))}</span>,
+    },
+    {
+      key: 'action',
+      header: '',
+      kind: 'action',
+      width: '8%',
+      render: (row) => (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleReactivate(row.id);
+              }}
+            >
+              <ArchiveRestore size={14} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('contextMenu.reactivate')}</TooltipContent>
+        </Tooltip>
+      ),
+    },
+  ];
 
   return (
-    <div className="flex flex-col h-full pt-14">
-      <header className="flex items-center gap-2.5 h-12 px-5 border-b border-[var(--border)] flex-shrink-0">
-        <Archive size={18} className="text-[var(--text-muted)]" />
-        <h2 className="font-medium text-[var(--text-primary)]">{t('leftNav.archivedChats')}</h2>
-        <span className="text-xs text-[var(--text-muted)]">({totalArchived})</span>
-      </header>
+    <div className="flex flex-col h-full">
+      <WindowTitlebar
+        left={
+          <div className="flex items-center gap-2.5">
+            <Archive size={18} className="text-[var(--text-muted)]" />
+            <h2 className="type-section-title text-[var(--text-primary)]">{t('leftNav.archivedChats')}</h2>
+            <span className="type-support text-[var(--text-muted)]">({totalArchived})</span>
+          </div>
+        }
+      />
       {totalArchived > 0 && (
         <div className="px-5 py-3 flex-shrink-0">
           <div className="relative max-w-md">
@@ -622,72 +774,25 @@ function ArchivedTasks() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('leftNav.searchTasks')}
-              className="w-full h-9 pl-9 pr-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:ring-2 focus:ring-[var(--ring-accent)] focus:border-transparent transition-all"
+              className="w-full h-[var(--density-control-height)] pl-9 pr-3 rounded-md bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] glow-focus focus:border-transparent transition-all"
             />
           </div>
         </div>
       )}
       <ScrollArea className="flex-1 px-5">
-        <div className="max-w-3xl">
-          {archivedTasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <Archive size={40} className="text-[var(--text-muted)] opacity-40 mb-4" />
-              <p className="text-sm text-[var(--text-muted)]">
-                {searchQuery.trim() ? t('search.noResults') : t('archived.empty')}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-[1fr_minmax(80px,120px)_80px_32px] gap-x-3 items-center px-3 py-1.5 text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                <span>{t('common.task')}</span>
-                <span>Gateway</span>
-                <span>{t('common.time')}</span>
-                <span />
-              </div>
-              <AnimatePresence>
-                {archivedTasks.map((task) => {
-                  const gwName = gwInfoMap[task.gatewayId]?.name;
-                  return (
-                    <motion.div
-                      key={task.id}
-                      {...motionPresets.listItem}
-                      exit={{ opacity: 0, x: -8 }}
-                      layout
-                      className="grid grid-cols-[1fr_minmax(80px,120px)_80px_32px] gap-x-3 items-center px-3 py-2 rounded-md hover:bg-[var(--bg-hover)] transition-colors cursor-pointer group"
-                      onClick={() => handleOpenTask(task.id)}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <MessageSquare size={14} className="flex-shrink-0 text-[var(--text-muted)] opacity-50" />
-                        <span className="text-sm text-[var(--text-primary)] truncate">
-                          {task.title || t('common.noTitle')}
-                        </span>
-                      </div>
-                      <span className="text-xs text-[var(--text-muted)] truncate">{gwName || '-'}</span>
-                      <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
-                        {formatRelativeTime(new Date(task.updatedAt))}
-                      </span>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleReactivate(task.id);
-                            }}
-                          >
-                            <ArchiveRestore size={14} />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{t('contextMenu.reactivate')}</TooltipContent>
-                      </Tooltip>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-            </>
-          )}
+        <div className="max-w-[var(--content-max-width)]">
+          <DataTable
+            columns={columns}
+            rows={rows}
+            getRowKey={(row) => row.id}
+            onRowClick={(row) => handleOpenTask(row.id)}
+            empty={
+              <EmptyState
+                icon={<Archive size={24} className="text-[var(--text-muted)]" />}
+                title={searchQuery.trim() ? t('search.noResults') : t('archived.empty')}
+              />
+            }
+          />
         </div>
       </ScrollArea>
     </div>
@@ -696,26 +801,40 @@ function ArchivedTasks() {
 
 export default function MainArea({ onTogglePanel }: MainAreaProps) {
   const mainView = useUiStore((s) => s.mainView);
+  const messageLayout = useUiStore((s) => s.messageLayout);
+  const toggleMessageLayout = useUiStore((s) => s.toggleMessageLayout);
+  const activeTaskId = useTaskStore((s) => s.activeTaskId);
 
   return (
     <div className="flex flex-col h-full">
       <ConnectionBanner />
-      <AnimatePresence mode="wait">
-        {mainView === 'files' ? (
-          <motion.div key="files" {...motionPresets.fadeIn} className="flex-1 min-h-0">
-            <FileBrowser />
-          </motion.div>
-        ) : mainView === 'archived' ? (
-          <motion.div key="archived" {...motionPresets.fadeIn} className="flex-1 min-h-0">
-            <ArchivedTasks />
-          </motion.div>
-        ) : (
-          <motion.div key="chat" {...motionPresets.fadeIn} className="flex flex-col flex-1 min-h-0">
-            <ChatHeader onTogglePanel={onTogglePanel} />
-            <ChatContent />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {mainView === 'files' ? (
+        <div className="flex-1 min-h-0">
+          <FileBrowser />
+        </div>
+      ) : mainView === 'archived' ? (
+        <div className="flex-1 min-h-0">
+          <ArchivedTasks />
+        </div>
+      ) : mainView === 'cron' ? (
+        <div className="flex-1 min-h-0">
+          <CronPanel />
+        </div>
+      ) : mainView === 'teams' ? (
+        <div className="flex-1 min-h-0">
+          <TeamsPanel />
+        </div>
+      ) : (
+        <div key={`chat-${activeTaskId ?? 'welcome'}`} className="relative flex flex-col flex-1 min-h-0">
+          <ChatHeader
+            onTogglePanel={onTogglePanel}
+            messageLayout={messageLayout}
+            onToggleMessageLayout={toggleMessageLayout}
+          />
+          {activeTaskId && <EnsembleAgentBar taskId={activeTaskId} />}
+          <ChatContent />
+        </div>
+      )}
     </div>
   );
 }

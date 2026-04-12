@@ -17,8 +17,8 @@ import type {
   GatewayAuth,
   ChatAttachment,
 } from '@clawwork/shared';
-import type { BrowserWindow } from 'electron';
 import { sendToWindow } from './window-utils.js';
+import { getMainWindow } from '../window-manager.js';
 import {
   loadOrCreateDeviceIdentity,
   buildDeviceConnectPayload,
@@ -27,6 +27,7 @@ import {
   type DeviceIdentity,
 } from './device-identity.js';
 import { getDebugLogger } from '../debug/index.js';
+import { ensureGatewayWindowsSystemTrust } from './tls-trust.js';
 
 const WS_CLOSE_POLICY_VIOLATION = 1008;
 const WS_HANDSHAKE_TIMEOUT_MS = 10_000;
@@ -51,7 +52,6 @@ const REQ_TIMEOUT_MS = 15_000;
 
 export class GatewayClient {
   private ws: WebSocket | null = null;
-  private mainWindow: BrowserWindow | null = null;
   private authenticated = false;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -67,6 +67,7 @@ export class GatewayClient {
   private deviceIdentity: DeviceIdentity;
   private lastError: string | null = null;
   private lastErrorCode: string | null = null;
+  private serverVersion: string | undefined;
   private onPairingSuccess?: (gatewayId: string) => void;
 
   constructor(config: GatewayClientConfig, opts?: GatewayClientOptions) {
@@ -96,12 +97,9 @@ export class GatewayClient {
     this.connect();
   }
 
-  setMainWindow(win: BrowserWindow): void {
-    this.mainWindow = win;
-  }
-
   connect(): void {
     if (this.destroyed) return;
+    ensureGatewayWindowsSystemTrust();
     this.cleanup();
     this.lastError = null;
 
@@ -142,17 +140,15 @@ export class GatewayClient {
         },
       });
       this.authenticated = false;
+      this.serverVersion = undefined;
       this.stopHeartbeat();
-      if (this.mainWindow) {
-        sendToWindow(this.mainWindow, 'gateway-status', {
-          gatewayId: this.gatewayId,
-          connected: false,
-          error,
-          reconnectAttempt: this.reconnectAttempts,
-          maxAttempts: MAX_RECONNECT_ATTEMPTS,
-        });
-      }
-      // Don't retry when server explicitly rejects (pairing required, auth denied)
+      sendToWindow(getMainWindow(), 'gateway-status', {
+        gatewayId: this.gatewayId,
+        connected: false,
+        error,
+        reconnectAttempt: this.reconnectAttempts,
+        maxAttempts: MAX_RECONNECT_ATTEMPTS,
+      });
       if (code === WS_CLOSE_POLICY_VIOLATION) return;
       this.scheduleReconnect();
     });
@@ -165,13 +161,11 @@ export class GatewayClient {
         gatewayId: this.gatewayId,
         error: { name: err.name, message: err.message, stack: err.stack },
       });
-      if (this.mainWindow) {
-        sendToWindow(this.mainWindow, 'gateway-status', {
-          gatewayId: this.gatewayId,
-          connected: false,
-          error: err.message,
-        });
-      }
+      sendToWindow(getMainWindow(), 'gateway-status', {
+        gatewayId: this.gatewayId,
+        connected: false,
+        error: err.message,
+      });
     });
   }
 
@@ -264,14 +258,12 @@ export class GatewayClient {
       data: { payload: summarizePayload(frame.payload) },
     });
 
-    if (this.mainWindow) {
-      sendToWindow(this.mainWindow, 'gateway-event', {
-        gatewayId: this.gatewayId,
-        event: frame.event,
-        payload: frame.payload,
-        seq: frame.seq,
-      });
-    }
+    sendToWindow(getMainWindow(), 'gateway-event', {
+      gatewayId: this.gatewayId,
+      event: frame.event,
+      payload: frame.payload,
+      seq: frame.seq,
+    });
   }
 
   private buildAuthWithDeviceToken(): GatewayAuth {
@@ -329,14 +321,17 @@ export class GatewayClient {
           this.reconnectAttempts = 0;
           this.lastError = null;
           this.lastErrorCode = null;
+          const server = payload['server'] as Record<string, unknown> | undefined;
+          const rawVersion = server?.['version'];
+          this.serverVersion = typeof rawVersion === 'string' ? rawVersion : undefined;
           this.storeDeviceTokenFromPayload(payload);
+          this.subscribeSessionEvents();
           this.startHeartbeat();
-          if (this.mainWindow) {
-            sendToWindow(this.mainWindow, 'gateway-status', {
-              gatewayId: this.gatewayId,
-              connected: true,
-            });
-          }
+          sendToWindow(getMainWindow(), 'gateway-status', {
+            gatewayId: this.gatewayId,
+            connected: true,
+            serverVersion: this.serverVersion,
+          });
         } else {
           getDebugLogger().error({
             domain: 'gateway',
@@ -359,6 +354,27 @@ export class GatewayClient {
           data: { errorCode: this.lastErrorCode },
         });
         this.ws?.close(WS_CLOSE_POLICY_VIOLATION, 'auth failed');
+      });
+  }
+
+  private subscribeSessionEvents(): void {
+    this.sendReq('sessions.subscribe', {}, { requestId: 'sessions-subscribe' })
+      .then(() => {
+        getDebugLogger().info({
+          domain: 'gateway',
+          event: 'gateway.sessions.subscribe.ok',
+          gatewayId: this.gatewayId,
+          requestId: 'sessions-subscribe',
+        });
+      })
+      .catch((err: Error & { code?: string }) => {
+        getDebugLogger().warn({
+          domain: 'gateway',
+          event: 'gateway.sessions.subscribe.failed',
+          gatewayId: this.gatewayId,
+          requestId: 'sessions-subscribe',
+          error: { name: err.name, message: err.message, stack: err.stack, code: err.code },
+        });
       });
   }
 
@@ -433,7 +449,8 @@ export class GatewayClient {
         error: { message: errMsg, code: frame.error?.code },
         data: { method: pending.method },
       });
-      const err = new Error(errMsg) as Error & { details?: Record<string, unknown> };
+      const err = new Error(errMsg) as Error & { code?: string; details?: Record<string, unknown> };
+      err.code = frame.error?.code;
       if (frame.error?.details) {
         err.details = frame.error.details;
       }
@@ -458,7 +475,9 @@ export class GatewayClient {
           data: { method },
           error: { message: 'not connected' },
         });
-        reject(new Error('not connected'));
+        const notConnErr = new Error('not connected') as Error & { code?: string };
+        notConnErr.code = 'GATEWAY_NOT_CONNECTED';
+        reject(notConnErr);
         return;
       }
 
@@ -481,7 +500,9 @@ export class GatewayClient {
           data: { method },
           error: { message: `request timeout: ${method}` },
         });
-        reject(new Error(`request timeout: ${method}`));
+        const timeoutErr = new Error(`request timeout: ${method}`) as Error & { code?: string };
+        timeoutErr.code = 'TIMEOUT';
+        reject(timeoutErr);
       }, REQ_TIMEOUT_MS);
 
       this.pendingRequests.set(id, {
@@ -507,7 +528,17 @@ export class GatewayClient {
           params: summarizePayload(params),
         },
       });
-      this.ws.send(JSON.stringify(frame));
+      try {
+        this.ws.send(JSON.stringify(frame));
+      } catch (err) {
+        this.pendingRequests.delete(id);
+        clearTimeout(timer);
+        const sendErr = new Error(
+          `failed to send request: ${err instanceof Error ? err.message : 'unknown'}`,
+        ) as Error & { code?: string };
+        sendErr.code = 'SEND_FAILED';
+        reject(sendErr);
+      }
     });
   }
 
@@ -548,12 +579,55 @@ export class GatewayClient {
     return this.sendReq('sessions.list', {}, { requestId: randomUUID() });
   }
 
+  async listSessionsBySpawner(spawnedBy: string): Promise<Record<string, unknown>> {
+    return this.sendReq('sessions.list', { spawnedBy }, { requestId: randomUUID() });
+  }
+
+  async createSession(params: { key: string; agentId: string; message?: string }): Promise<Record<string, unknown>> {
+    return this.sendReq('sessions.create', params, { requestId: randomUUID() });
+  }
+
   async listModels(): Promise<Record<string, unknown>> {
     return this.sendReq('models.list', {});
   }
 
   async listAgents(): Promise<Record<string, unknown>> {
     return this.sendReq('agents.list', {});
+  }
+
+  async createAgent(params: {
+    name: string;
+    workspace: string;
+    emoji?: string;
+    avatar?: string;
+  }): Promise<Record<string, unknown>> {
+    return this.sendReq('agents.create', params);
+  }
+
+  async updateAgent(params: {
+    agentId: string;
+    name?: string;
+    workspace?: string;
+    model?: string;
+    avatar?: string;
+  }): Promise<Record<string, unknown>> {
+    return this.sendReq('agents.update', params);
+  }
+
+  async deleteAgent(params: { agentId: string; deleteFiles?: boolean }): Promise<Record<string, unknown>> {
+    return this.sendReq('agents.delete', params);
+  }
+
+  async listAgentFiles(agentId: string): Promise<Record<string, unknown>> {
+    return this.sendReq('agents.files.list', { agentId });
+  }
+
+  async getAgentFile(agentId: string, name: string): Promise<Record<string, unknown>> {
+    return this.sendReq('agents.files.get', { agentId, name });
+  }
+
+  async setAgentFile(agentId: string, name: string, content: string): Promise<Record<string, unknown>> {
+    return this.sendReq('agents.files.set', { agentId, name, content });
   }
 
   async patchSession(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -580,6 +654,66 @@ export class GatewayClient {
     return this.sendReq('tools.catalog', params);
   }
 
+  async getSkillsStatus(agentId?: string): Promise<Record<string, unknown>> {
+    const params: Record<string, unknown> = {};
+    if (agentId) params.agentId = agentId;
+    return this.sendReq('skills.status', params);
+  }
+
+  async installSkill(
+    params:
+      | { name: string; installId: string; dangerouslyForceUnsafeInstall?: boolean; timeoutMs?: number }
+      | { source: 'clawhub'; slug: string; version?: string; force?: boolean; timeoutMs?: number },
+  ): Promise<Record<string, unknown>> {
+    return this.sendReq('skills.install', params);
+  }
+
+  async updateSkill(
+    params:
+      | { skillKey: string; enabled?: boolean; apiKey?: string; env?: Record<string, string> }
+      | { source: 'clawhub'; slug?: string; all?: boolean },
+  ): Promise<Record<string, unknown>> {
+    return this.sendReq('skills.update', params);
+  }
+
+  async searchSkills(params: { query?: string; limit?: number }): Promise<Record<string, unknown>> {
+    return this.sendReq('skills.search', params);
+  }
+
+  async getSkillDetail(slug: string): Promise<Record<string, unknown>> {
+    return this.sendReq('skills.detail', { slug });
+  }
+
+  async getSkillBins(): Promise<Record<string, unknown>> {
+    return this.sendReq('skills.bins', {});
+  }
+
+  async getConfig(): Promise<Record<string, unknown>> {
+    return this.sendReq('config.get', {});
+  }
+
+  async setConfig(params: { raw: string; baseHash?: string }): Promise<Record<string, unknown>> {
+    return this.sendReq('config.set', params);
+  }
+
+  async patchConfig(params: {
+    raw: string;
+    baseHash?: string;
+    sessionKey?: string;
+    note?: string;
+    restartDelayMs?: number;
+  }): Promise<Record<string, unknown>> {
+    return this.sendReq('config.patch', params);
+  }
+
+  async getConfigSchema(): Promise<Record<string, unknown>> {
+    return this.sendReq('config.schema', {});
+  }
+
+  async lookupConfigSchema(path: string): Promise<Record<string, unknown>> {
+    return this.sendReq('config.schema.lookup', { path });
+  }
+
   async getUsageStatus(): Promise<Record<string, unknown>> {
     return this.sendReq('usage.status', {});
   }
@@ -600,6 +734,36 @@ export class GatewayClient {
     return this.sendReq('sessions.usage', params as unknown as Record<string, unknown>);
   }
 
+  async listCronJobs(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.sendReq('cron.list', params ?? {});
+  }
+
+  async getCronStatus(): Promise<Record<string, unknown>> {
+    return this.sendReq('cron.status', {});
+  }
+
+  async addCronJob(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.sendReq('cron.add', params);
+  }
+
+  async updateCronJob(jobId: string, patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.sendReq('cron.update', { jobId, patch });
+  }
+
+  async removeCronJob(jobId: string): Promise<Record<string, unknown>> {
+    return this.sendReq('cron.remove', { jobId });
+  }
+
+  async runCronJob(jobId: string, mode?: string): Promise<Record<string, unknown>> {
+    const params: Record<string, unknown> = { jobId };
+    if (mode) params.mode = mode;
+    return this.sendReq('cron.run', params);
+  }
+
+  async listCronRuns(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.sendReq('cron.runs', params ?? {});
+  }
+
   get isConnected(): boolean {
     return this.authenticated && this.ws?.readyState === WebSocket.OPEN;
   }
@@ -610,6 +774,10 @@ export class GatewayClient {
 
   get lastConnectionErrorCode(): string | null {
     return this.lastErrorCode;
+  }
+
+  get version(): string | undefined {
+    return this.serverVersion;
   }
 
   private startHeartbeat(): void {
@@ -650,16 +818,14 @@ export class GatewayClient {
         attempt: this.reconnectAttempts,
         error: { message: 'max reconnect attempts reached' },
       });
-      if (this.mainWindow) {
-        sendToWindow(this.mainWindow, 'gateway-status', {
-          gatewayId: this.gatewayId,
-          connected: false,
-          error: 'max reconnect attempts',
-          reconnectAttempt: this.reconnectAttempts,
-          maxAttempts: MAX_RECONNECT_ATTEMPTS,
-          gaveUp: true,
-        });
-      }
+      sendToWindow(getMainWindow(), 'gateway-status', {
+        gatewayId: this.gatewayId,
+        connected: false,
+        error: 'max reconnect attempts',
+        reconnectAttempt: this.reconnectAttempts,
+        maxAttempts: MAX_RECONNECT_ATTEMPTS,
+        gaveUp: true,
+      });
       return;
     }
 
@@ -698,7 +864,9 @@ export class GatewayClient {
         data: { method: pending.method },
         error: { message: 'connection closed' },
       });
-      pending.reject(new Error('connection closed'));
+      const closeErr = new Error('connection closed') as Error & { code?: string };
+      closeErr.code = 'GATEWAY_CONNECTION_CLOSED';
+      pending.reject(closeErr);
       this.pendingRequests.delete(id);
     }
     if (this.ws) {

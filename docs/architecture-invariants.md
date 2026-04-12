@@ -9,7 +9,7 @@ This document is the short list of rules that should survive refactors, contribu
 - Task is the primary product object.
 - One Task maps to one OpenClaw session.
 - The three-panel layout is a core product affordance.
-- Artifact persistence is local-first: filesystem first, SQLite index second, Git history third.
+- Artifact persistence is local-first: filesystem first, SQLite index second.
 
 ## Session And Protocol Invariants
 
@@ -23,7 +23,7 @@ This document is the short list of rules that should survive refactors, contribu
 ## Ownership Invariants
 
 - `packages/shared/` owns protocol, constants, and shared types.
-- `packages/desktop/src/main/` owns WebSocket, filesystem, database, Git, workspace config, IPC handlers, and OS integration.
+- `packages/desktop/src/main/` owns WebSocket, filesystem, database, workspace config, IPC handlers, and OS integration.
 - `packages/desktop/src/preload/` owns the typed renderer bridge.
 - `packages/desktop/src/renderer/` owns UI state and presentation.
 - The renderer must cross the process boundary only through `window.clawwork` from preload.
@@ -33,12 +33,11 @@ This document is the short list of rules that should survive refactors, contribu
 
 - Artifact files are stored on disk and treated as the source of durable output.
 - SQLite is the metadata and search index, not the canonical file store.
-- Git tracks local artifact history; it is not the application state machine.
 - Preserve stable workspace paths and per-task artifact directories.
 
 ## UI Invariants
 
-- All renderer changes must follow `docs/design-system.md`.
+- All renderer changes must follow `theme.css`, `design-tokens.ts`, and `pnpm check:ui-contract`.
 - Do not hardcode hex, rgb, or rgba colors in renderer TypeScript or TSX.
 - Use CSS variables from `theme.css` and tokens from `design-tokens.ts`.
 - Preserve the dark-first visual language, light-theme parity, and explicit interaction states.
@@ -61,5 +60,5 @@ Before merging a non-trivial change, confirm:
 - Session routing is still explicit.
 - The owning layer is clear.
 - Local-first artifact persistence is preserved.
-- UI changes still match `docs/design-system.md`.
+- UI changes still satisfy `theme.css`, `design-tokens.ts`, and `pnpm check:ui-contract`.
 - `pnpm check` and any relevant E2E coverage pass.

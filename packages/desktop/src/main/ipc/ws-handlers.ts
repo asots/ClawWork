@@ -2,21 +2,43 @@ import { ipcMain } from 'electron';
 import { getGatewayClient, getAllGatewayClients, reconnectGateway } from '../ws/index.js';
 import { readConfig, ensureDeviceId } from '../workspace/config.js';
 import { isClawWorkSession, parseTaskIdFromSessionKey, parseAgentIdFromSessionKey } from '@clawwork/shared';
-import type { ChatAttachment } from '@clawwork/shared';
+import { parseToolArgs } from '@clawwork/core';
+import type {
+  ApprovalDecision,
+  ChatAttachment,
+  ConfigPatchParams,
+  ConfigSetParams,
+  ExecApprovalResolveParams,
+  SkillInstallParams,
+  SkillSearchParams,
+  SkillUpdateParams,
+} from '@clawwork/shared';
 import { getDebugLogger } from '../debug/index.js';
 import type { GatewayClient } from '../ws/gateway-client.js';
 
 async function gatewayRpc(
   gatewayId: string,
   fn: (gw: GatewayClient) => Promise<Record<string, unknown> | void>,
-): Promise<{ ok: boolean; result?: Record<string, unknown>; error?: string }> {
+): Promise<{
+  ok: boolean;
+  result?: Record<string, unknown>;
+  error?: string;
+  errorCode?: string;
+  errorDetails?: Record<string, unknown>;
+}> {
   const gw = getGatewayClient(gatewayId);
-  if (!gw?.isConnected) return { ok: false, error: 'gateway not connected' };
+  if (!gw?.isConnected) return { ok: false, error: 'gateway not connected', errorCode: 'GATEWAY_NOT_CONNECTED' };
   try {
     const result = await fn(gw);
     return result ? { ok: true, result } : { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'unknown error' };
+    const typed = err as Error & { code?: string; details?: Record<string, unknown> };
+    return {
+      ok: false,
+      error: typed.message ?? 'unknown error',
+      errorCode: typed.code,
+      errorDetails: typed.details,
+    };
   }
 }
 
@@ -61,6 +83,8 @@ interface ChatHistoryPayload {
   sessionId?: string;
 }
 
+const INTERNAL_ASSISTANT_MARKERS = new Set(['NO_REPLY']);
+
 /** Parsed tool call for transport to renderer */
 interface ParsedToolCall {
   id: string;
@@ -103,7 +127,7 @@ export function registerWsHandlers(): void {
           taskId,
           error: { message: 'gateway not connected' },
         });
-        return { ok: false, error: 'gateway not connected' };
+        return { ok: false, error: 'gateway not connected', errorCode: 'GATEWAY_NOT_CONNECTED' };
       }
       try {
         await gw.sendChatMessage(payload.sessionKey, payload.content, payload.attachments);
@@ -117,16 +141,17 @@ export function registerWsHandlers(): void {
         });
         return { ok: true };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'unknown error';
+        const typed = err as Error & { code?: string; details?: Record<string, unknown> };
+        const msg = typed.message ?? 'unknown error';
         getDebugLogger().error({
           domain: 'ipc',
           event: 'ipc.ws.send-message.failed',
           gatewayId: payload.gatewayId,
           sessionKey: payload.sessionKey,
           taskId,
-          error: { message: msg },
+          error: { message: msg, code: typed.code },
         });
-        return { ok: false, error: msg };
+        return { ok: false, error: msg, errorCode: typed.code, errorDetails: typed.details };
       }
     },
   );
@@ -177,14 +202,44 @@ export function registerWsHandlers(): void {
     },
   );
 
+  ipcMain.handle('ws:list-sessions-by-spawner', async (_event, payload: { gatewayId: string; spawnedBy: string }) => {
+    const gw = getGatewayClient(payload.gatewayId);
+    if (!gw?.isConnected) return { ok: false, error: 'gateway not connected' };
+    try {
+      const result = await gw.listSessionsBySpawner(payload.spawnedBy);
+      return { ok: true, result };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'unknown error' };
+    }
+  });
+
+  ipcMain.handle(
+    'ws:create-session',
+    async (_event, payload: { gatewayId: string; key: string; agentId: string; message?: string }) => {
+      const gw = getGatewayClient(payload.gatewayId);
+      if (!gw?.isConnected) return { ok: false, error: 'gateway not connected' };
+      try {
+        const result = await gw.createSession({
+          key: payload.key,
+          agentId: payload.agentId,
+          message: payload.message,
+        });
+        return { ok: true, result };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'unknown error' };
+      }
+    },
+  );
+
   ipcMain.handle('ws:gateway-status', () => {
     const clients = getAllGatewayClients();
-    const statusMap: Record<string, { connected: boolean; name: string; error?: string }> = {};
+    const statusMap: Record<string, { connected: boolean; name: string; error?: string; serverVersion?: string }> = {};
     for (const [id, client] of clients) {
       statusMap[id] = {
         connected: client.isConnected,
         name: client.name,
         error: client.lastConnectionError ?? undefined,
+        serverVersion: client.version,
       };
     }
     return statusMap;
@@ -261,7 +316,7 @@ export function registerWsHandlers(): void {
                       typeof b.arguments === 'object' && b.arguments !== null
                         ? (b.arguments as Record<string, unknown>)
                         : typeof b.arguments === 'string'
-                          ? safeJsonParse(b.arguments)
+                          ? parseToolArgs(b.arguments)
                           : undefined,
                     result: resultText,
                     startedAt: m.timestamp ? new Date(m.timestamp).toISOString() : new Date().toISOString(),
@@ -281,7 +336,11 @@ export function registerWsHandlers(): void {
                 toolCalls,
               };
             })
-            .filter((m) => m.content || m.toolCalls.length > 0);
+            .filter((m) => {
+              if (!m.content && m.toolCalls.length === 0) return false;
+              if (m.role === 'assistant' && INTERNAL_ASSISTANT_MARKERS.has(m.content.trim())) return false;
+              return true;
+            });
 
           const firstUserMsg = msgs.find((m) => m.role === 'user' && m.content);
           const titleFromMsg = firstUserMsg ? firstUserMsg.content.slice(0, 30) : '';
@@ -328,22 +387,72 @@ export function registerWsHandlers(): void {
       const result = await gw.listModels();
       return { ok: true, result };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown error';
-      return { ok: false, error: msg };
+      return { ok: false, error: err instanceof Error ? err.message : 'unknown error' };
     }
   });
 
-  ipcMain.handle('ws:agents-list', async (_event, payload: { gatewayId: string }) => {
-    const gw = getGatewayClient(payload.gatewayId);
-    if (!gw?.isConnected) return { ok: false, error: 'gateway not connected' };
-    try {
-      const result = await gw.listAgents();
-      return { ok: true, result };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown error';
-      return { ok: false, error: msg };
-    }
-  });
+  ipcMain.handle('ws:agents-list', async (_event, payload: { gatewayId: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.listAgents()),
+  );
+
+  ipcMain.handle(
+    'ws:agents-create',
+    async (_event, payload: { gatewayId: string; name: string; workspace: string; emoji?: string; avatar?: string }) =>
+      gatewayRpc(payload.gatewayId, (gw) =>
+        gw.createAgent({
+          name: payload.name,
+          workspace: payload.workspace,
+          emoji: payload.emoji,
+          avatar: payload.avatar,
+        }),
+      ),
+  );
+
+  ipcMain.handle(
+    'ws:agents-update',
+    async (
+      _event,
+      payload: {
+        gatewayId: string;
+        agentId: string;
+        name?: string;
+        workspace?: string;
+        model?: string;
+        avatar?: string;
+      },
+    ) =>
+      gatewayRpc(payload.gatewayId, (gw) =>
+        gw.updateAgent({
+          agentId: payload.agentId,
+          name: payload.name,
+          workspace: payload.workspace,
+          model: payload.model,
+          avatar: payload.avatar,
+        }),
+      ),
+  );
+
+  ipcMain.handle(
+    'ws:agents-delete',
+    async (_event, payload: { gatewayId: string; agentId: string; deleteFiles?: boolean }) =>
+      gatewayRpc(payload.gatewayId, (gw) =>
+        gw.deleteAgent({ agentId: payload.agentId, deleteFiles: payload.deleteFiles }),
+      ),
+  );
+
+  ipcMain.handle('ws:agents-files-list', async (_event, payload: { gatewayId: string; agentId: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.listAgentFiles(payload.agentId)),
+  );
+
+  ipcMain.handle('ws:agents-files-get', async (_event, payload: { gatewayId: string; agentId: string; name: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.getAgentFile(payload.agentId, payload.name)),
+  );
+
+  ipcMain.handle(
+    'ws:agents-files-set',
+    async (_event, payload: { gatewayId: string; agentId: string; name: string; content: string }) =>
+      gatewayRpc(payload.gatewayId, (gw) => gw.setAgentFile(payload.agentId, payload.name, payload.content)),
+  );
 
   ipcMain.handle(
     'ws:session-patch',
@@ -358,7 +467,7 @@ export function registerWsHandlers(): void {
       const gw = getGatewayClient(payload.gatewayId);
       if (!gw?.isConnected) return { ok: false, error: 'gateway not connected' };
       try {
-        const result = await gw.patchSession({ sessionKey: payload.sessionKey, ...payload.patch });
+        const result = await gw.patchSession({ key: payload.sessionKey, ...payload.patch });
         return { ok: true, result };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'unknown error';
@@ -399,6 +508,62 @@ export function registerWsHandlers(): void {
     ) => gatewayRpc(payload.gatewayId, (gw) => gw.getToolsCatalog(payload.agentId)),
   );
 
+  ipcMain.handle(
+    'ws:skills-status',
+    async (
+      _event,
+      payload: {
+        gatewayId: string;
+        agentId?: string;
+      },
+    ) => gatewayRpc(payload.gatewayId, (gw) => gw.getSkillsStatus(payload.agentId)),
+  );
+
+  ipcMain.handle('ws:skills-search', async (_event, payload: { gatewayId: string } & SkillSearchParams) => {
+    const { gatewayId, ...params } = payload;
+    return gatewayRpc(gatewayId, (gw) => gw.searchSkills(params));
+  });
+
+  ipcMain.handle('ws:skills-detail', async (_event, payload: { gatewayId: string; slug: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.getSkillDetail(payload.slug)),
+  );
+
+  ipcMain.handle('ws:skills-install', async (_event, payload: { gatewayId: string } & SkillInstallParams) => {
+    const { gatewayId, ...params } = payload;
+    return gatewayRpc(gatewayId, (gw) => gw.installSkill(params));
+  });
+
+  ipcMain.handle('ws:skills-update', async (_event, payload: { gatewayId: string } & SkillUpdateParams) => {
+    const { gatewayId, ...params } = payload;
+    return gatewayRpc(gatewayId, (gw) => gw.updateSkill(params));
+  });
+
+  ipcMain.handle('ws:skills-bins', async (_event, payload: { gatewayId: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.getSkillBins()),
+  );
+
+  ipcMain.handle('ws:config-get', async (_event, payload: { gatewayId: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.getConfig()),
+  );
+
+  ipcMain.handle('ws:config-set', async (_event, payload: { gatewayId: string } & ConfigSetParams) => {
+    const { gatewayId, ...params } = payload;
+    return gatewayRpc(gatewayId, (gw) => gw.setConfig(params));
+  });
+
+  ipcMain.handle('ws:config-patch', async (_event, payload: { gatewayId: string } & ConfigPatchParams) => {
+    const { gatewayId, ...params } = payload;
+    return gatewayRpc(gatewayId, (gw) => gw.patchConfig(params));
+  });
+
+  ipcMain.handle('ws:config-schema', async (_event, payload: { gatewayId: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.getConfigSchema()),
+  );
+
+  ipcMain.handle('ws:config-schema-lookup', async (_event, payload: { gatewayId: string; path: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.lookupConfigSchema(payload.path)),
+  );
+
   ipcMain.handle('ws:usage-status', async (_event, payload: { gatewayId: string }) =>
     gatewayRpc(payload.gatewayId, (gw) => gw.getUsageStatus()),
   );
@@ -431,16 +596,17 @@ export function registerWsHandlers(): void {
     'ws:exec-approval-resolve',
     async (
       _event,
-      payload: {
+      payload: ExecApprovalResolveParams & {
         gatewayId: string;
-        id: string;
-        decision: string;
       },
     ) => {
       const gw = getGatewayClient(payload.gatewayId);
       if (!gw?.isConnected) return { ok: false, error: 'gateway not connected' };
       try {
-        await gw.sendReq('exec.approval.resolve', { id: payload.id, decision: payload.decision });
+        await gw.sendReq('exec.approval.resolve', {
+          id: payload.id,
+          decision: payload.decision as ApprovalDecision,
+        });
         return { ok: true };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'unknown error';
@@ -518,12 +684,37 @@ export function registerWsHandlers(): void {
     reconnectGateway(payload.gatewayId);
     return { ok: true };
   });
-}
 
-function safeJsonParse(raw: string): Record<string, unknown> | undefined {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return { raw };
-  }
+  ipcMain.handle('ws:cron-list', async (_event, payload: { gatewayId: string; [k: string]: unknown }) => {
+    const { gatewayId, ...params } = payload;
+    return gatewayRpc(gatewayId, (gw) => gw.listCronJobs(params));
+  });
+
+  ipcMain.handle('ws:cron-status', async (_event, payload: { gatewayId: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.getCronStatus()),
+  );
+
+  ipcMain.handle('ws:cron-add', async (_event, payload: { gatewayId: string; [k: string]: unknown }) => {
+    const { gatewayId, ...params } = payload;
+    return gatewayRpc(gatewayId, (gw) => gw.addCronJob(params));
+  });
+
+  ipcMain.handle(
+    'ws:cron-update',
+    async (_event, payload: { gatewayId: string; jobId: string; patch: Record<string, unknown> }) =>
+      gatewayRpc(payload.gatewayId, (gw) => gw.updateCronJob(payload.jobId, payload.patch)),
+  );
+
+  ipcMain.handle('ws:cron-remove', async (_event, payload: { gatewayId: string; jobId: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.removeCronJob(payload.jobId)),
+  );
+
+  ipcMain.handle('ws:cron-run', async (_event, payload: { gatewayId: string; jobId: string; mode?: string }) =>
+    gatewayRpc(payload.gatewayId, (gw) => gw.runCronJob(payload.jobId, payload.mode)),
+  );
+
+  ipcMain.handle('ws:cron-runs', async (_event, payload: { gatewayId: string; [k: string]: unknown }) => {
+    const { gatewayId, ...params } = payload;
+    return gatewayRpc(gatewayId, (gw) => gw.listCronRuns(params));
+  });
 }

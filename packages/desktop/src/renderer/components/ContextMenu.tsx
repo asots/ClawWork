@@ -3,6 +3,10 @@ import { createPortal } from 'react-dom';
 import type { TaskStatus } from '@clawwork/shared';
 import { cn } from '@/lib/utils';
 import i18n from '../i18n';
+import ListItem from '@/components/semantic/ListItem';
+import { copyTextToClipboard } from '@/lib/clipboard';
+import { useTaskStore } from '@/stores/taskStore';
+import { useUiStore } from '@/stores/uiStore';
 
 export interface MenuItem {
   label: string;
@@ -24,9 +28,12 @@ const INITIAL_STATE: MenuState = {
 };
 
 export interface SessionActions {
+  rename: (taskId: string) => void;
   compact: (taskId: string) => void;
   reset: (taskId: string) => void;
   deleteTask: (taskId: string) => void;
+  exportMarkdown: (taskId: string) => void;
+  exportMarkdownAs: (taskId: string) => void;
   isConnected: (taskId: string) => boolean;
 }
 
@@ -47,6 +54,13 @@ export function useTaskContextMenu(
 
   const items: MenuItem[] = [];
   const connected = state.isOpen && sessionActions ? sessionActions.isConnected(state.taskId) : false;
+
+  if (sessionActions) {
+    items.push({
+      label: i18n.t('contextMenu.rename'),
+      action: () => sessionActions.rename(state.taskId),
+    });
+  }
 
   if (state.taskStatus === 'active') {
     items.push({
@@ -72,10 +86,28 @@ export function useTaskContextMenu(
       disabled: !connected,
     });
     items.push({
+      label: i18n.t('contextMenu.saveToMarkdown'),
+      action: () => sessionActions.exportMarkdownAs(state.taskId),
+    });
+    items.push({
+      label: i18n.t('contextMenu.exportToFiles'),
+      action: () => sessionActions.exportMarkdown(state.taskId),
+    });
+    items.push({
       label: i18n.t('contextMenu.deleteTask'),
       action: () => sessionActions.deleteTask(state.taskId),
       danger: true,
     });
+  }
+
+  if (useUiStore.getState().devMode && state.isOpen) {
+    const task = useTaskStore.getState().tasks.find((t) => t.id === state.taskId);
+    if (task?.sessionKey) {
+      items.push({
+        label: i18n.t('contextMenu.copySessionKey'),
+        action: () => void copyTextToClipboard(task.sessionKey).catch(console.error),
+      });
+    }
   }
 
   if (state.taskStatus === 'active' || state.taskStatus === 'completed') {
@@ -190,7 +222,7 @@ export function TaskContextMenuPopover({ open, position, items, onClose }: TaskC
       ref={menuRef}
       role="menu"
       style={{ position: 'fixed', left: pos.x, top: pos.y }}
-      className="z-50 min-w-[8rem] overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-1 text-[var(--text-primary)] shadow-[var(--shadow-elevated)] animate-in fade-in-0 zoom-in-95"
+      className="z-50 w-max min-w-36 max-w-80 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-1 text-[var(--text-primary)] shadow-[var(--shadow-elevated)] animate-in fade-in-0 zoom-in-95"
     >
       {items.map((item) => (
         <button
@@ -202,17 +234,21 @@ export function TaskContextMenuPopover({ open, position, items, onClose }: TaskC
             item.action();
             onClose();
           }}
-          className={cn(
-            'relative flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors',
-            'hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
-            'focus-visible:bg-[var(--bg-hover)] focus-visible:text-[var(--text-primary)] focus-visible:outline-none',
-            'disabled:pointer-events-none disabled:opacity-50',
-            item.danger
-              ? 'text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] focus-visible:bg-[var(--danger-bg)] focus-visible:text-[var(--danger)]'
-              : 'text-[var(--text-secondary)]',
-          )}
+          className={cn('w-full text-left disabled:pointer-events-none disabled:opacity-50')}
         >
-          {item.label}
+          <ListItem
+            title={
+              <span
+                className={cn('type-support', item.danger ? 'text-[var(--danger)]' : 'text-[var(--text-secondary)]')}
+              >
+                {item.label}
+              </span>
+            }
+            className={cn(
+              'min-h-0 rounded-md px-2 py-1.5',
+              item.danger ? 'hover:bg-[var(--danger-bg)]' : 'hover:bg-[var(--bg-hover)]',
+            )}
+          />
         </button>
       ))}
     </div>,

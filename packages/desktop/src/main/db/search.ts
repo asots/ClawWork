@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export interface SearchResult {
+interface SearchResult {
   type: 'task' | 'message' | 'artifact';
   id: string;
   title: string;
@@ -58,7 +58,7 @@ export function globalSearch(db: Database.Database, query: string): SearchResult
 }
 
 const ARTIFACT_SEARCH_SQL = `
-SELECT a.id, a.task_id, a.name, a.type, a.local_path, a.mime_type, a.size, a.created_at, a.git_sha, a.file_path, a.message_id,
+SELECT a.id, a.task_id, a.name, a.type, a.local_path, a.mime_type, a.size, a.created_at, a.file_path, a.message_id,
   snippet(artifacts_fts, 0, '<mark>', '</mark>', '…', 20) AS name_snippet,
   snippet(artifacts_fts, 1, '<mark>', '</mark>', '…', 32) AS content_snippet
 FROM artifacts_fts
@@ -68,7 +68,7 @@ ORDER BY artifacts_fts.rank
 LIMIT 50;
 `;
 
-export interface ArtifactSearchResult {
+interface ArtifactSearchResult {
   id: string;
   taskId: string;
   name: string;
@@ -77,7 +77,6 @@ export interface ArtifactSearchResult {
   mimeType: string;
   size: number;
   createdAt: string;
-  gitSha: string;
   filePath: string;
   messageId: string;
   contentSnippet?: string;
@@ -98,7 +97,6 @@ export function searchArtifacts(db: Database.Database, query: string): ArtifactS
     mime_type: string;
     size: number;
     created_at: string;
-    git_sha: string;
     file_path: string;
     message_id: string;
     name_snippet: string;
@@ -113,7 +111,6 @@ export function searchArtifacts(db: Database.Database, query: string): ArtifactS
     mimeType: r.mime_type,
     size: r.size,
     createdAt: r.created_at,
-    gitSha: r.git_sha,
     filePath: r.file_path,
     messageId: r.message_id,
     contentSnippet: r.content_snippet || r.name_snippet || undefined,

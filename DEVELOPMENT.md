@@ -37,7 +37,7 @@ ClawWork is a thin but opinionated desktop layer on top of OpenClaw Gateway.
 - one WebSocket connection per configured gateway
 - one Task = one OpenClaw session
 - many Tasks can run in parallel
-- one workspace = SQLite index + local Git repo + per-task artifact directories
+- one workspace = SQLite index + per-task artifact directories
 
 Session key format:
 
@@ -50,36 +50,37 @@ Rules that shape the whole codebase:
 - Gateway broadcasts all session events; the client must filter by `sessionKey`
 - messages are serial within a session, parallel across sessions
 - artifact files are local files first, database records second
-- Git is for local history of artifacts, not app state sync
 
 ## System Architecture
 
 ```text
 OpenClaw Gateway (:18789)
-  <- WS -> Electron main process
+  <- WS -> Electron main process / PWA gateway client
               |- ws/          gateway client, auth, reconnect, heartbeat
               |- ipc/         main <-> renderer boundary
               |- db/          SQLite + Drizzle + FTS
-              |- artifact/    file persistence + Git commit
+              |- artifact/    file persistence
               |- workspace/   config + workspace bootstrap
               |- context/     file context scan/read/classify
               |- debug/       ring buffer + NDJSON export
+              |- net/         safe-fetch, SSRF guard
               |- tray.ts      tray integration
               `- quick-launch.ts
-                    <- contextBridge -> preload/
-                    <- API -> renderer/
-                              |- stores/
-                              |- layouts/
-                              |- components/
-                              |- hooks/
-                              |- lib/
-                              `- styles/
+                    <- @clawwork/core ->
+                    |- stores/    message, task, room, ui (shared between desktop & pwa)
+                    |- services/  dispatcher, session-sync, composer
+                    |- ports/     platform abstraction interfaces
+                    `- protocol/  message parsing, history normalization
+                          <- contextBridge / direct import ->
+                          renderer / PWA
 ```
 
 Design split:
 
 - `packages/shared`: protocol, constants, domain types; zero runtime baggage
-- `packages/desktop`: actual app; main process owns IO, renderer owns UI state
+- `packages/core`: stores, services, ports, protocol; shared business logic between desktop and pwa
+- `packages/desktop`: Electron app; main process owns IO, renderer owns UI state
+- `packages/pwa`: Progressive Web App; shares core stores and services with desktop
 
 ## Repository Map
 
@@ -92,16 +93,47 @@ packages/
       types.ts             Task, Message, Artifact, ToolCall domain types
       debug.ts             structured debug event types
 
+  core/
+    src/
+      index.ts             public API surface
+      stores/              Zustand stores — the single source of truth
+        message-store.ts   message lifecycle, streaming, finalization
+        task-store.ts      task CRUD, session adoption, selection
+        ui-store.ts        panels, modals, preferences
+        room-store.ts      ensemble task rooms, conductor/performer orchestration
+        team-store.ts      team CRUD, TeamsHub install state
+        system-session-store.ts  system-level session tracking
+      services/            business logic
+        gateway-dispatcher.ts  sole event router for all Gateway messages
+        session-sync.ts    reconcile local state with Gateway sessions
+        chat-composer.ts   message construction and send orchestration
+        auto-title.ts      task auto-titling from first message
+        error-classify.ts  error categorization for user display
+        team-parser.ts     parse team definition files
+        team-installer.ts  install teams from TeamsHub or local definitions
+        system-session-service.ts  system session lifecycle
+      protocol/            Gateway protocol utilities
+        normalize-history.ts  history response → local message format
+        parse-content.ts   content block parsing
+        types.ts           protocol-specific types
+      ports/               dependency inversion interfaces
+        gateway-transport.ts  WS transport abstraction
+        persistence.ts     DB abstraction for desktop/pwa
+        platform.ts        platform detection
+        notifications.ts   notification abstraction
+        settings.ts        settings abstraction
+
   desktop/
     src/main/
       index.ts             bootstrap order is deliberate; do not randomize it
       ws/                  GatewayClient and connection lifecycle
       ipc/                 renderer-safe API surface
       db/                  schema, FTS, queries
-      artifact/            save file, detect mime, record DB, commit Git
+      artifact/            save file, detect mime, record DB
       workspace/           app config and workspace init
       context/             @ file context indexing and bounded reads
       debug/               observability and export bundle
+      net/                 safe-fetch, SSRF guard
 
     src/preload/
       index.ts             `window.clawwork`
@@ -112,9 +144,9 @@ packages/
       stores/              Zustand domain stores
       layouts/             app regions
       components/          task/chat/artifact widgets
-      hooks/               gateway dispatch, theme, tray, voice
+      hooks/               gateway bootstrap, resize, tray, update, voice
       lib/                 session sync, slash commands, clipboard, voice
-      styles/              theme.css + design-tokens.ts
+      styles/              theme.css + typography.css + design-tokens.ts
       i18n/                locale resources
 ```
 
@@ -147,15 +179,18 @@ Task is the product primitive, not chat thread cosmetics.
 
 - `taskStore`: task lifecycle, selection, session adoption
 - `messageStore`: append, stream, finalize, map events to task
+- `roomStore`: ensemble task rooms, conductor/performer orchestration
+- `teamStore`: team definitions, TeamsHub discovery and install state
+- `systemSessionStore`: system-level session tracking
 - session sync reconstructs local tasks from Gateway sessions and histories
 - every bug here is usually a routing bug, session-key bug, or optimistic UI bug
 
-### 3. Workspace, artifacts, and Git
+### 3. Workspace and artifacts
 
 ClawWork persists AI output locally and treats files as first-class product value.
 
-- workspace root contains `.clawwork.db`, `.git/`, `.clawwork-debug/`, and per-task directories
-- `artifact/` saves files, records metadata, and creates Git history
+- workspace root contains `.clawwork.db`, `.clawwork-debug/`, and per-task directories
+- `artifact/` saves files and records metadata
 - never design features that assume cloud-only persistence
 - preserve stable local paths; users may script against the workspace
 
@@ -174,7 +209,7 @@ Renderer is a structured operator UI, not a generic chat page.
 - three-panel layout is fundamental
 - use one Zustand store per domain
 - keep selectors narrow; avoid broad subscriptions
-- `useGatewayDispatcher` is the event-routing choke point
+- `useGatewayBootstrap` is the event-routing choke point
 - reusable UI belongs in `components/`; page/region composition belongs in `layouts/`
 
 ### 6. File context and developer workflows
@@ -203,7 +238,7 @@ ChatInput
 -> IPC `ws:send-message`
 -> GatewayClient `chat.send`
 -> Gateway emits `chat`
--> useGatewayDispatcher routes by sessionKey
+-> useGatewayBootstrap routes by sessionKey
 -> messageStore streams/finalizes
 -> renderer updates
 ```
@@ -233,7 +268,7 @@ Gateway approval event
 - TypeScript strict; `any` is a bug unless proven otherwise
 - no comments in code
 - desktop imports shared protocol/types; do not fork types locally
-- main process owns filesystem, DB, Git, WS, and OS integration
+- main process owns filesystem, DB, WS, and OS integration
 - preload is the only renderer bridge; keep it explicit and typed
 - prefer simple data flow over clever abstractions
 - preserve task isolation; avoid hidden cross-task state
@@ -248,14 +283,14 @@ Naming and layout:
 
 ## UI and Design System
 
-Read `docs/design-system.md` before touching UI.
+Before touching UI, inspect `theme.css`, `design-tokens.ts`, and `scripts/check-ui-contract.mjs`.
 
 Non-negotiables:
 
 - dark-first product language with light theme parity
 - accent is green: `#0FFD0D` dark, `#0B8A0A` light
 - backgrounds, borders, focus rings, and depth come from CSS variables in `theme.css`
-- tokens also exist in `src/renderer/styles/design-tokens.ts`
+- `design-tokens.ts` only holds motion presets and token keys for TS consumers
 - typography is Inter Variable + JetBrains Mono
 - motion should be meaningful and respect `prefers-reduced-motion`
 - every interactive control needs default, hover, active, focused, disabled, and loading states
@@ -278,9 +313,19 @@ pnpm format
 pnpm format:check
 pnpm test
 pnpm check
+pnpm check:architecture
+pnpm check:ui-contract
+pnpm check:renderer-copy
+pnpm check:i18n
+pnpm check:dead-code
+pnpm dev:pwa
+pnpm dev:website
+pnpm dev:slides
 pnpm test:e2e
 pnpm test:e2e:smoke
 pnpm test:e2e:gateway
+pnpm test:coverage
+pnpm clean
 pnpm --filter @clawwork/desktop build
 pnpm --filter @clawwork/desktop build:mac
 pnpm --filter @clawwork/desktop build:win
@@ -340,21 +385,22 @@ PR body must cover:
 
 `pr-check.yml` is the baseline gate:
 
-- `quality`: `pnpm lint` + `pnpm format:check`
-- `test`: `pnpm typecheck` + `pnpm test`
-- `build`: macOS arm64 package + Windows x64 package
+- `quality`: `pnpm lint` + `pnpm format:check`, plus conditional architecture, UI, i18n, and dead-code checks
+- `test`: package-scoped typecheck and unit tests based on the changed workspace area
+- `build`: Linux smoke package for desktop-affecting pull requests
 
-`e2e.yml` adds smoke and Gateway integration coverage on pull requests.
+`e2e.yml` adds smoke and Gateway integration coverage only when the affected files justify it.
 
 Local expectation: do not open a PR that obviously cannot survive CI.
 
 ### Releases
 
-- push `v*` tag on `main` to trigger `release.yml`
-- release verifies tag/package version match
-- artifacts: macOS universal + Windows x64
+- push a release tag on `main` to trigger `release.yml`
+- supported tags: `vX.Y.Z`, `vX.Y.Z-beta.N`, `vX.Y.Z-rc.N`, `vX.Y.Z-alpha.N`
+- release verifies tag format and tag/package version match
+- prerelease tags publish GitHub prereleases
 - stable releases trigger Homebrew update
-- `dev-release.yml` continuously publishes the moving `dev` build from `main`
+- artifacts: macOS arm64 + macOS x64 + Windows x64 + Linux x64
 
 ## OpenClaw-Specific Rules
 
@@ -380,7 +426,7 @@ Before coding, ask these questions:
 - does this keep session routing explicit?
 - does this respect local-first artifact persistence?
 - does this belong in main, preload, shared, or renderer?
-- does this follow `docs/design-system.md` if UI is involved?
+- does this follow `theme.css`, `design-tokens.ts`, and `pnpm check:ui-contract` if UI is involved?
 - will `pnpm check` and relevant E2E still pass?
 
 If not, stop and fix the design first.
@@ -391,13 +437,15 @@ For a new engineer or AI agent, read in this order:
 
 1. `DEVELOPMENT.md`
 2. `docs/architecture-invariants.md`
-3. `docs/design-system.md`
-4. `docs/openclaw-desktop-design.md`
-5. `packages/shared/src/constants.ts`
-6. `packages/shared/src/gateway-protocol.ts`
-7. `packages/desktop/src/main/index.ts`
-8. `packages/desktop/src/main/ws/gateway-client.ts`
-9. `packages/desktop/src/renderer/App.tsx`
-10. `packages/desktop/src/renderer/hooks/useGatewayDispatcher.ts`
+3. `packages/desktop/src/renderer/styles/theme.css`
+4. `packages/desktop/src/renderer/styles/design-tokens.ts`
+5. `scripts/check-ui-contract.mjs`
+6. `docs/openclaw-desktop-design.md`
+7. `packages/shared/src/constants.ts`
+8. `packages/shared/src/gateway-protocol.ts`
+9. `packages/desktop/src/main/index.ts`
+10. `packages/desktop/src/main/ws/gateway-client.ts`
+11. `packages/desktop/src/renderer/App.tsx`
+12. `packages/desktop/src/renderer/hooks/useGatewayBootstrap.ts`
 
 That is enough context to stop being dangerous.

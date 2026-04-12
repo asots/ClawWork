@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import type { MainView } from '@clawwork/core';
 import {
   insertTranscriptAtCaret,
   resolveVoicePressAction,
@@ -11,18 +12,13 @@ import type {
   VoiceSession,
 } from '@/lib/voice/types';
 
-export type {
-  CreateVoiceSessionHandlers,
-  VoiceErrorCode,
-  VoicePermissionStatus,
-  VoiceSession,
-} from '@/lib/voice/types';
+export type { VoicePermissionStatus } from '@/lib/voice/types';
 
 interface UseVoiceInputOptions {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   hasActiveTask: boolean;
   activeTaskKey?: string | null;
-  mainView: 'chat' | 'files' | 'archived';
+  mainView: MainView;
   settingsOpen: boolean;
   loadIntroSeen: () => Promise<boolean>;
   markIntroSeen: () => Promise<void>;
@@ -79,10 +75,16 @@ export function useVoiceInput({
 
   useEffect(() => {
     let cancelled = false;
-    void loadIntroSeen().then((seen) => {
-      if (cancelled) return;
-      introSeenRef.current = seen;
-    });
+    void loadIntroSeen()
+      .then((seen) => {
+        if (cancelled) return;
+        introSeenRef.current = seen;
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.error('[useVoiceInput] loadIntroSeen failed:', err);
+        introSeenRef.current = false;
+      });
     return () => {
       cancelled = true;
     };

@@ -11,8 +11,8 @@ export function useUpdateCheck(): void {
         if (result.hasUpdate) {
           setHasUpdate(true);
         }
-      } catch {
-        // silently ignore — no network or API failure
+      } catch (err) {
+        console.error('[useUpdateCheck] check failed:', err);
       }
     }, 5000);
 

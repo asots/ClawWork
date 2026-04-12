@@ -21,11 +21,13 @@ __pycache__/
 package-lock.json
 
 # Local AI tooling
-.opencode/
+!.claude/rules/*
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .cursor/
 
 # OS
@@ -34,3 +36,4 @@ Thumbs.db
 # test
 test-results/
 playwright-report/
+coverage/

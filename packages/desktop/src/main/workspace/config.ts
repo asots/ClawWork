@@ -1,10 +1,10 @@
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import { join } from 'path';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { randomUUID } from 'node:crypto';
 import { CONFIG_FILE_NAME, DEFAULT_WORKSPACE_DIR } from '@clawwork/shared';
-import type { GatewayAuth } from '@clawwork/shared';
+import type { GatewayAuth, LanguageCode, TeamHubRegistryConfig } from '@clawwork/shared';
 
 export interface GatewayServerConfig {
   id: string;
@@ -27,10 +27,17 @@ export interface QuickLaunchConfig {
   shortcut: string;
 }
 
+export interface NotificationConfig {
+  taskComplete?: boolean;
+  approvalRequest?: boolean;
+  gatewayDisconnect?: boolean;
+}
+
 export interface AppConfig {
   workspacePath: string;
   theme?: 'dark' | 'light' | 'auto';
-  language?: 'en' | 'zh';
+  density?: 'compact' | 'comfortable' | 'spacious';
+  language?: LanguageCode;
   gateways: GatewayServerConfig[];
   defaultGatewayId?: string;
   sendShortcut?: 'enter' | 'cmdEnter';
@@ -41,10 +48,13 @@ export interface AppConfig {
   voiceInput?: VoiceInputConfig;
   quickLaunch?: QuickLaunchConfig;
   trayEnabled?: boolean;
+  notifications?: NotificationConfig;
   leftNavShortcut?: 'Comma' | 'BracketLeft';
   rightPanelShortcut?: 'Period' | 'BracketRight';
   deviceId?: string;
   zoomLevel?: number;
+  devMode?: boolean;
+  teamHubRegistries?: TeamHubRegistryConfig[];
 }
 
 function configFilePath(): string {
@@ -55,7 +65,60 @@ export function getDefaultWorkspacePath(): string {
   return join(homedir(), DEFAULT_WORKSPACE_DIR);
 }
 
-/** Migrate legacy single-gateway config to multi-gateway format */
+const ENCRYPTED_PREFIX = 'enc:';
+
+function encryptField(value: string | undefined): string | undefined {
+  if (!value) return value;
+  if (value.startsWith(ENCRYPTED_PREFIX)) return value;
+  if (!safeStorage.isEncryptionAvailable()) return value;
+  try {
+    return ENCRYPTED_PREFIX + safeStorage.encryptString(value).toString('base64');
+  } catch (e) {
+    console.error('safeStorage: encrypt failed, storing plaintext', e);
+    return value;
+  }
+}
+
+function decryptField(value: string | undefined): string | undefined {
+  if (!value) return value;
+  if (!value.startsWith(ENCRYPTED_PREFIX)) return value;
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.error('safeStorage: decryption not available, credential lost');
+    return undefined;
+  }
+  try {
+    const buf = Buffer.from(value.slice(ENCRYPTED_PREFIX.length), 'base64');
+    return safeStorage.decryptString(buf);
+  } catch (e) {
+    console.error('safeStorage: decrypt failed, credential lost', e);
+    return undefined;
+  }
+}
+
+function encryptGatewayCredentials(config: AppConfig): AppConfig {
+  const clone = structuredClone(config);
+  for (const gw of clone.gateways) {
+    gw.token = encryptField(gw.token);
+    gw.password = encryptField(gw.password);
+    gw.pairingCode = encryptField(gw.pairingCode);
+  }
+  clone.bootstrapToken = encryptField(clone.bootstrapToken);
+  clone.password = encryptField(clone.password);
+  return clone;
+}
+
+function decryptGatewayCredentials(config: AppConfig): AppConfig {
+  const clone = structuredClone(config);
+  for (const gw of clone.gateways) {
+    gw.token = decryptField(gw.token);
+    gw.password = decryptField(gw.password);
+    gw.pairingCode = decryptField(gw.pairingCode);
+  }
+  clone.bootstrapToken = decryptField(clone.bootstrapToken);
+  clone.password = decryptField(clone.password);
+  return clone;
+}
+
 function migrateConfigIfNeeded(config: AppConfig): AppConfig {
   if (config.gatewayUrl && (!config.gateways || config.gateways.length === 0)) {
     const id = randomUUID();
@@ -83,7 +146,6 @@ function migrateConfigIfNeeded(config: AppConfig): AppConfig {
     writeConfig(migrated);
     return migrated;
   }
-  // Ensure gateways array always exists
   if (!config.gateways) {
     config.gateways = [];
   }
@@ -96,7 +158,8 @@ export function readConfig(): AppConfig | null {
   try {
     const raw = readFileSync(cfgPath, 'utf-8');
     const config = JSON.parse(raw) as AppConfig;
-    return migrateConfigIfNeeded(config);
+    const migrated = migrateConfigIfNeeded(config);
+    return decryptGatewayCredentials(migrated);
   } catch {
     return null;
   }
@@ -104,7 +167,8 @@ export function readConfig(): AppConfig | null {
 
 export function writeConfig(config: AppConfig): void {
   const cfgPath = configFilePath();
-  writeFileSync(cfgPath, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  const encrypted = encryptGatewayCredentials(config);
+  writeFileSync(cfgPath, JSON.stringify(encrypted, null, 2), { encoding: 'utf-8', mode: 0o600 });
 }
 
 export function updateConfig(partial: Partial<AppConfig>): AppConfig {

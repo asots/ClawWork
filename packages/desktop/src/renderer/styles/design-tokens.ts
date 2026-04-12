@@ -1,101 +1,27 @@
-/**
- * ClawWork Design Tokens
- *
- * Single source of truth for the design system.
- * CSS Variables in theme.css reference these same values.
- * Components use Tailwind classes that map to CSS Variables.
- */
+export const STAGGER_STEP = 0.03;
 
-export const colors = {
-  neutral: {
-    50: '#FAFAFA',
-    100: '#F3F4F6',
-    200: '#E5E7EB',
-    300: '#D1D5DB',
-    400: '#9CA3AF',
-    500: '#6B7280',
-    600: '#4B5563',
-    700: '#374151',
-    800: '#2A2A2A',
-    900: '#242424',
-    950: '#1C1C1C',
-  },
-  accent: {
-    50: '#ECFDF5',
-    100: '#D1FAE5',
-    200: '#A7F3D0',
-    300: '#6EE7B7',
-    400: '#34D399',
-    500: '#0FFD0D',
-    600: '#0DDC0B',
-    700: '#0B8A0A',
-    800: '#065F06',
-    900: '#064E06',
-    950: '#022C02',
-  },
-  danger: {
-    400: '#F87171',
-    500: '#EF4444',
-    600: '#DC2626',
-  },
-  warning: {
-    400: '#FBBF24',
-    500: '#F59E0B',
-  },
-  info: {
-    400: '#60A5FA',
-    500: '#3B82F6',
-  },
+export const motionDuration = {
+  fast: 0.1,
+  normal: 0.15,
+  moderate: 0.2,
+  slow: 0.3,
+  ambient: 0.5,
+  dramatic: 0.35,
 } as const;
 
-export const spacing = {
-  0: '0px',
-  0.5: '2px',
-  1: '4px',
-  1.5: '6px',
-  2: '8px',
-  3: '12px',
-  4: '16px',
-  5: '20px',
-  6: '24px',
-  8: '32px',
-  10: '40px',
-  12: '48px',
-  16: '64px',
-  20: '80px',
-  24: '96px',
+export const motionEase = {
+  standard: [0.2, 0, 0, 1],
+  enter: [0, 0, 0.2, 1],
+  exit: [0.4, 0, 1, 1],
+  dramatic: [0.4, 0, 0, 1],
+  gentle: [0.25, 0.1, 0.25, 1],
 } as const;
 
-export const radius = {
-  none: '0px',
-  sm: '4px',
-  md: '6px',
-  lg: '8px',
-  xl: '12px',
-  '2xl': '16px',
-  full: '9999px',
-} as const;
-
-export const shadows = {
-  sm: '0 1px 2px rgba(0, 0, 0, 0.3)',
-  md: '0 2px 8px rgba(0, 0, 0, 0.4)',
-  lg: '0 4px 16px rgba(0, 0, 0, 0.5)',
-  xl: '0 8px 32px rgba(0, 0, 0, 0.6)',
-} as const;
-
-export const transitions = {
-  duration: {
-    fast: '100ms',
-    normal: '150ms',
-    moderate: '200ms',
-    slow: '300ms',
-  },
-  easing: {
-    default: 'cubic-bezier(0.2, 0, 0, 1)',
-    enter: 'cubic-bezier(0, 0, 0.2, 1)',
-    exit: 'cubic-bezier(0.4, 0, 1, 1)',
-    spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-  },
+export const motionSpring = {
+  snappy: { type: 'spring' as const, bounce: 0.15, duration: 0.4 },
+  gentle: { type: 'spring' as const, stiffness: 120, damping: 20, mass: 1 },
+  bouncy: { type: 'spring' as const, stiffness: 300, damping: 18, mass: 0.8 },
+  panelSettle: { type: 'spring' as const, stiffness: 200, damping: 28, mass: 1 },
 } as const;
 
 export const motion = {
@@ -103,28 +29,100 @@ export const motion = {
     initial: { opacity: 0 },
     animate: { opacity: 1 },
     exit: { opacity: 0 },
-    transition: { duration: 0.15 },
+    transition: { duration: motionDuration.normal },
   },
   slideUp: {
     initial: { opacity: 0, y: 8 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: 8 },
-    transition: { duration: 0.2, ease: [0.2, 0, 0, 1] },
+    transition: { duration: motionDuration.moderate, ease: motionEase.standard },
   },
   slideIn: {
     initial: { opacity: 0, x: -8 },
     animate: { opacity: 1, x: 0 },
     exit: { opacity: 0, x: -8 },
-    transition: { duration: 0.2, ease: [0.2, 0, 0, 1] },
+    transition: { duration: motionDuration.moderate, ease: motionEase.standard },
   },
   scale: {
     whileHover: { scale: 1.02 },
     whileTap: { scale: 0.97 },
-    transition: { duration: 0.15 },
+    transition: { duration: motionDuration.normal },
   },
   listItem: {
     initial: { opacity: 0, y: 4 },
     animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.15 },
+    transition: { duration: motionDuration.normal },
+  },
+  staggerContainer: {
+    animate: { transition: { staggerChildren: STAGGER_STEP } },
+  },
+  crossfade: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+    transition: { duration: motionDuration.moderate, ease: motionEase.gentle },
+  },
+  dialogEnter: {
+    initial: { opacity: 0, scale: 0.96, y: 8 },
+    animate: { opacity: 1, scale: 1, y: 0 },
+    exit: { opacity: 0, scale: 0.96, y: 8 },
+    transition: { duration: motionDuration.dramatic, ease: motionEase.dramatic },
+  },
+  cardHover: {
+    whileHover: { y: -2, scale: 1.01 },
+    transition: { duration: motionDuration.normal, ease: motionEase.standard },
+  },
+  messageEnter: {
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: motionDuration.moderate, ease: motionEase.enter },
+  },
+  heroOverlay: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+    transition: { duration: motionDuration.ambient, ease: motionEase.gentle },
+  },
+  heroPanel: {
+    initial: { opacity: 0, y: 16, scale: 0.98 },
+    animate: { opacity: 1, y: 0, scale: 1 },
+    exit: { opacity: 0, y: 16, scale: 0.98 },
+    transition: { ...motionSpring.panelSettle },
+  },
+  collapse: {
+    initial: { opacity: 0, height: 0 },
+    animate: { opacity: 1, height: 'auto' },
+    exit: { opacity: 0, height: 0 },
+    transition: { duration: motionDuration.normal },
   },
 } as const;
+
+export const commandPaletteMotion = {
+  overlay: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+    transition: { duration: motionDuration.normal },
+  },
+  panel: {
+    initial: { opacity: 0, scale: 0.96, y: -8 },
+    animate: { opacity: 1, scale: 1, y: 0 },
+    exit: { opacity: 0, scale: 0.96, y: -8 },
+    transition: { duration: motionDuration.moderate, ease: motionEase.dramatic },
+  },
+  item: {
+    initial: { opacity: 0, x: -4 },
+    animate: { opacity: 1, x: 0 },
+    transition: { duration: motionDuration.fast },
+  },
+} as const;
+
+const reducedMotionQuery =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)')
+    : null;
+
+export function safeMotion<T extends Record<string, unknown>>(preset: T): T | Record<string, never> {
+  if (reducedMotionQuery?.matches) return {} as Record<string, never>;
+  return preset;
+}

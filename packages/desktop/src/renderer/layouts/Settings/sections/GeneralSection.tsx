@@ -1,28 +1,31 @@
-import { useCallback } from 'react';
-import { Moon, Sun, Monitor } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Moon, Sun, Monitor, Bell, Smartphone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { modKey } from '@/lib/utils';
 import {
   useUiStore,
   type Theme,
+  type DensityMode,
   type Language,
   type SendShortcut,
   type PanelShortcutLeft,
   type PanelShortcutRight,
 } from '@/stores/uiStore';
-import SettingRow from '../components/SettingRow';
+import { SUPPORTED_LANGUAGES } from '@/i18n/languages';
+import SettingRow from '@/components/semantic/SettingRow';
 import SegmentedControl from '../components/SegmentedControl';
-
-const LANGUAGES: { value: Language; label: string }[] = [
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: '中文' },
-];
+import Toggle from '../components/Toggle';
+import SettingGroup from '@/components/semantic/SettingGroup';
+import PairMobileDialog from '../components/PairMobileDialog';
 
 export default function GeneralSection() {
   const { t } = useTranslation();
+  const [showPairDialog, setShowPairDialog] = useState(false);
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
+  const density = useUiStore((s) => s.density);
+  const setDensity = useUiStore((s) => s.setDensity);
   const language = useUiStore((s) => s.language);
   const setLanguage = useUiStore((s) => s.setLanguage);
   const sendShortcut = useUiStore((s) => s.sendShortcut);
@@ -38,6 +41,14 @@ export default function GeneralSection() {
       toast.success(t('settings.themeUpdated'));
     },
     [setTheme, t],
+  );
+
+  const handleDensityChange = useCallback(
+    (next: DensityMode) => {
+      setDensity(next);
+      toast.success(t('settings.densityUpdated'));
+    },
+    [setDensity, t],
   );
 
   const handleShortcutChange = useCallback(
@@ -67,12 +78,46 @@ export default function GeneralSection() {
     [rightPanelShortcut, setRightPanelShortcut, t],
   );
 
+  const [notifyState, setNotifyState] = useState({
+    taskComplete: true,
+    approvalRequest: true,
+    gatewayDisconnect: true,
+  });
+
+  useEffect(() => {
+    window.clawwork.getSettings().then((settings) => {
+      if (!settings?.notifications) return;
+      const n = settings.notifications;
+      setNotifyState((prev) => ({
+        taskComplete: n.taskComplete ?? prev.taskComplete,
+        approvalRequest: n.approvalRequest ?? prev.approvalRequest,
+        gatewayDisconnect: n.gatewayDisconnect ?? prev.gatewayDisconnect,
+      }));
+    });
+  }, []);
+
+  const handleNotificationToggle = useCallback(
+    (key: 'taskComplete' | 'approvalRequest' | 'gatewayDisconnect', value: boolean) => {
+      setNotifyState((prev) => {
+        const next = { ...prev, [key]: value };
+        window.clawwork.updateSettings({ notifications: next });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const notificationToggles = [
+    { key: 'taskComplete' as const, i18nKey: 'settings.notifyTaskComplete' },
+    { key: 'approvalRequest' as const, i18nKey: 'settings.notifyApproval' },
+    { key: 'gatewayDisconnect' as const, i18nKey: 'settings.notifyDisconnect' },
+  ];
+
   return (
-    <div>
-      <h3 className="text-base font-semibold text-[var(--text-primary)]">{t('settings.general')}</h3>
-      <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">{t('settings.generalDesc')}</p>
-      <div className="rounded-xl bg-[var(--bg-elevated)] shadow-[var(--shadow-card)] border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
-        <div className="px-5 py-4">
+    <div className="space-y-8">
+      <div>
+        <h3 className="type-section-title mb-4 text-[var(--text-primary)]">{t('settings.general')}</h3>
+        <SettingGroup>
           <SettingRow label={t('settings.theme')}>
             <SegmentedControl
               layoutId="seg-theme"
@@ -92,7 +137,7 @@ export default function GeneralSection() {
                   value: 'dark' as const,
                   label: (
                     <>
-                      <Moon size={14} /> Dark
+                      <Moon size={14} /> {t('common.dark')}
                     </>
                   ),
                 },
@@ -100,26 +145,40 @@ export default function GeneralSection() {
                   value: 'light' as const,
                   label: (
                     <>
-                      <Sun size={14} /> Light
+                      <Sun size={14} /> {t('common.light')}
                     </>
                   ),
                 },
               ]}
             />
           </SettingRow>
-        </div>
-        <div className="px-5 py-4">
-          <SettingRow label="Language">
+          <SettingRow label={t('settings.density')}>
             <SegmentedControl
-              layoutId="seg-lang"
-              value={language}
-              onChange={setLanguage}
-              options={LANGUAGES}
-              ariaLabel="Language"
+              layoutId="seg-density"
+              value={density}
+              onChange={handleDensityChange}
+              ariaLabel={t('settings.density')}
+              options={[
+                { value: 'compact' as const, label: t('settings.densityCompact') },
+                { value: 'comfortable' as const, label: t('settings.densityComfortable') },
+                { value: 'spacious' as const, label: t('settings.densitySpacious') },
+              ]}
             />
           </SettingRow>
-        </div>
-        <div className="px-5 py-4">
+          <SettingRow label={t('settings.language')}>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
+              aria-label={t('settings.language')}
+              className="glow-focus type-body rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-1.5 text-[var(--text-primary)]"
+            >
+              {SUPPORTED_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </SettingRow>
           <SettingRow label={t('settings.sendShortcut')}>
             <SegmentedControl
               layoutId="seg-send"
@@ -132,8 +191,6 @@ export default function GeneralSection() {
               ]}
             />
           </SettingRow>
-        </div>
-        <div className="px-5 py-4">
           <SettingRow label={t('settings.leftNavShortcut')}>
             <SegmentedControl
               layoutId="seg-left-nav"
@@ -146,8 +203,6 @@ export default function GeneralSection() {
               ]}
             />
           </SettingRow>
-        </div>
-        <div className="px-5 py-4">
           <SettingRow label={t('settings.rightPanelShortcut')}>
             <SegmentedControl
               layoutId="seg-right-panel"
@@ -160,8 +215,54 @@ export default function GeneralSection() {
               ]}
             />
           </SettingRow>
-        </div>
+        </SettingGroup>
       </div>
+
+      <div>
+        <h3 className="type-section-title mb-4 text-[var(--text-primary)]">{t('settings.notifications')}</h3>
+        <SettingGroup>
+          {notificationToggles.map(({ key, i18nKey }) => (
+            <SettingRow
+              key={key}
+              label={
+                <div className="flex items-center gap-3">
+                  <Bell size={14} className="text-[var(--text-muted)] flex-shrink-0" />
+                  <span className="type-label text-[var(--text-primary)]">{t(i18nKey)}</span>
+                </div>
+              }
+            >
+              <Toggle
+                checked={notifyState[key]}
+                onChange={(v) => handleNotificationToggle(key, v)}
+                ariaLabel={t(i18nKey)}
+              />
+            </SettingRow>
+          ))}
+        </SettingGroup>
+      </div>
+
+      <div>
+        <h3 className="type-section-title mb-4 text-[var(--text-primary)]">{t('settings.mobile')}</h3>
+        <SettingGroup>
+          <SettingRow
+            label={
+              <div className="flex items-center gap-3">
+                <Smartphone size={14} className="flex-shrink-0 text-[var(--text-muted)]" />
+                <span className="type-label text-[var(--text-primary)]">{t('settings.pairMobile')}</span>
+              </div>
+            }
+          >
+            <button
+              onClick={() => setShowPairDialog(true)}
+              className="glow-focus type-label rounded-lg border border-[var(--border)] px-3 py-1.5 text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+            >
+              {t('settings.pairMobileButton')}
+            </button>
+          </SettingRow>
+        </SettingGroup>
+      </div>
+
+      <PairMobileDialog open={showPairDialog} onOpenChange={setShowPairDialog} />
     </div>
   );
 }

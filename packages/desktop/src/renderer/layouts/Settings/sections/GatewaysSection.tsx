@@ -21,6 +21,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useUiStore, type GatewayConnectionStatus } from '@/stores/uiStore';
+import EmptyState from '@/components/semantic/EmptyState';
+import InlineNotice from '@/components/semantic/InlineNotice';
+import SettingGroup from '@/components/semantic/SettingGroup';
+import ToolbarButton from '@/components/semantic/ToolbarButton';
 import {
   inferGatewayAuthMode,
   parseGatewaySetupCode,
@@ -72,16 +76,10 @@ const GATEWAY_TYPE_LABEL: Record<GatewayType, string> = {
 };
 
 const inputClass = cn(
-  'flex-1 h-10 px-3 py-2 rounded-md',
+  'flex-1 h-[var(--density-control-height-lg)] px-3 py-2 rounded-md',
   'bg-[var(--bg-tertiary)] border border-[var(--border)]',
   'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
   'outline-none ring-accent-focus transition-colors',
-);
-
-const cardClass = cn(
-  'rounded-xl p-5',
-  'bg-[var(--bg-elevated)] shadow-[var(--shadow-card)]',
-  'border border-[var(--border-subtle)]',
 );
 
 function GatewayCard({
@@ -89,6 +87,7 @@ function GatewayCard({
   status,
   isDefault,
   isEditing,
+  serverVersion,
   onEdit,
   onRemove,
   onSetDefault,
@@ -97,6 +96,7 @@ function GatewayCard({
   status: GatewayConnectionStatus;
   isDefault: boolean;
   isEditing: boolean;
+  serverVersion?: string;
   onEdit: () => void;
   onRemove: () => void;
   onSetDefault: () => void;
@@ -110,7 +110,7 @@ function GatewayCard({
       layout
       {...motionPresets.listItem}
       className={cn(
-        'rounded-xl px-4 py-3.5 bg-[var(--bg-elevated)] shadow-[var(--shadow-card)] border transition-colors',
+        'surface-card rounded-xl px-4 py-3.5 transition-colors',
         isEditing ? 'border-[var(--accent)]/40' : 'border-[var(--border-subtle)]',
       )}
     >
@@ -126,23 +126,28 @@ function GatewayCard({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-sm text-[var(--text-primary)] truncate">{gw.name}</span>
+            <span className="type-label truncate text-[var(--text-primary)]">{gw.name}</span>
             {isDefault && (
-              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] font-medium">
+              <span className="type-badge normal-case flex items-center gap-1 rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 text-[var(--accent)]">
                 <Crown size={10} />
                 {t('settings.default')}
               </span>
             )}
-            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--bg-tertiary)] text-[var(--text-muted)] font-medium">
+            <span className="type-badge normal-case rounded-md bg-[var(--bg-tertiary)] px-1.5 py-0.5 text-[var(--text-muted)]">
               {typeLabel}
             </span>
+            {serverVersion && (
+              <span className="type-mono-data rounded-md bg-[var(--info)]/10 px-1.5 py-0.5 text-[var(--info)]">
+                v{serverVersion}
+              </span>
+            )}
           </div>
-          <p className="text-xs text-[var(--text-muted)] font-mono mt-0.5 truncate">{gw.url}</p>
+          <p className="type-mono-data mt-0.5 truncate text-[var(--text-muted)]">{gw.url}</p>
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <StatusIcon size={12} className={cn(STATUS_ICON[status].color, status === 'connecting' && 'animate-spin')} />
-          <span className={cn('text-xs', STATUS_ICON[status].color)}>{t(`connection.${status}`)}</span>
+          <span className={cn('type-support', STATUS_ICON[status].color)}>{t(`connection.${status}`)}</span>
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0 ml-1 pl-3 border-l border-[var(--border-subtle)]">
@@ -239,7 +244,7 @@ function GatewayForm({
   };
 
   const AUTH_TABS: { mode: GatewayAuthMode; label: string }[] = [
-    { mode: 'token', label: 'Token' },
+    { mode: 'token', label: t('settings.token') },
     { mode: 'password', label: t('settings.password') },
     { mode: 'pairingCode', label: t('settings.pairingCode') },
   ];
@@ -266,9 +271,9 @@ function GatewayForm({
       exit={{ opacity: 0, height: 0, marginTop: 0 }}
       className="overflow-hidden"
     >
-      <div className={cn(cardClass, 'space-y-4')}>
+      <div className="surface-card space-y-4 rounded-xl p-5">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-[var(--text-primary)]">
+          <span className="type-label text-[var(--text-primary)]">
             {editingId ? t('settings.editGateway') : t('settings.addGateway')}
           </span>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={t('common.close')}>
@@ -276,7 +281,7 @@ function GatewayForm({
           </Button>
         </div>
         <div>
-          <label htmlFor={nameId} className="text-sm text-[var(--text-secondary)] mb-1.5 block">
+          <label htmlFor={nameId} className="type-label mb-1.5 block text-[var(--text-secondary)]">
             {t('settings.gatewayName')}
           </label>
           <input
@@ -289,7 +294,7 @@ function GatewayForm({
           />
         </div>
         <div>
-          <label className="text-sm text-[var(--text-secondary)] mb-1.5 block">{t('settings.authMethod')}</label>
+          <label className="type-label mb-1.5 block text-[var(--text-secondary)]">{t('settings.authMethod')}</label>
           <div className="flex rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] p-0.5 gap-0.5 mb-3">
             {AUTH_TABS.map(({ mode, label }) => (
               <button
@@ -297,9 +302,9 @@ function GatewayForm({
                 type="button"
                 onClick={() => handleAuthModeChange(mode)}
                 className={cn(
-                  'flex-1 h-7 text-xs font-medium rounded-md transition-colors',
+                  'glow-focus type-label flex-1 h-7 rounded-md transition-colors',
                   authMode === mode
-                    ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm'
+                    ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-[var(--shadow-card)]'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
                 )}
               >
@@ -310,7 +315,7 @@ function GatewayForm({
         </div>
         {authMode !== 'pairingCode' && (
           <div>
-            <label htmlFor={urlId} className="text-sm text-[var(--text-secondary)] mb-1.5 block">
+            <label htmlFor={urlId} className="type-label mb-1.5 block text-[var(--text-secondary)]">
               {t('settings.gatewayUrl')}
             </label>
             <input
@@ -324,7 +329,7 @@ function GatewayForm({
           </div>
         )}
         <div>
-          <label className="text-sm text-[var(--text-secondary)] mb-1.5 block">
+          <label className="type-label mb-1.5 block text-[var(--text-secondary)]">
             {authMode === 'pairingCode' ? t('settings.pairingCode') : t('settings.authMethod')}
           </label>
           <input
@@ -348,8 +353,8 @@ function GatewayForm({
             className={cn(inputClass, 'w-full')}
           />
           {authMode === 'pairingCode' && form.url && form.url !== 'ws://127.0.0.1:18789' && (
-            <p className="text-xs text-[var(--accent)] mt-1.5">
-              ✓ {t('settings.setupCodeParsed')}: <span className="font-mono">{form.url}</span>
+            <p className="type-support mt-1.5 text-[var(--accent)]">
+              ✓ {t('settings.setupCodeParsed')}: <span className="type-mono-data">{form.url}</span>
             </p>
           )}
         </div>
@@ -387,6 +392,7 @@ function GatewayForm({
 export default function GatewaysSection() {
   const { t } = useTranslation();
   const gatewayStatusMap = useUiStore((s) => s.gatewayStatusMap);
+  const gatewayVersionMap = useUiStore((s) => s.gatewayVersionMap);
   const setDefaultGatewayId = useUiStore((s) => s.setDefaultGatewayId);
   const setGatewayInfoMap = useUiStore((s) => s.setGatewayInfoMap);
 
@@ -525,7 +531,7 @@ export default function GatewaysSection() {
         closeForm();
         await loadGateways();
       } else {
-        toast.error(res.error ?? 'Failed');
+        toast.error(res.error ?? t('errors.failed'));
       }
     } else {
       const newGw: GatewayServerConfig = {
@@ -544,7 +550,7 @@ export default function GatewaysSection() {
         closeForm();
         await loadGateways();
       } else {
-        toast.error(res.error ?? 'Failed');
+        toast.error(res.error ?? t('errors.failed'));
       }
     }
     setSaving(false);
@@ -557,7 +563,7 @@ export default function GatewaysSection() {
         toast.success(t('settings.gatewayRemoved'));
         await loadGateways();
       } else {
-        toast.error(res.error ?? 'Failed');
+        toast.error(res.error ?? t('errors.failed'));
       }
     },
     [loadGateways, t],
@@ -580,14 +586,14 @@ export default function GatewaysSection() {
   return (
     <>
       <div>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">{t('settings.gateways')}</h3>
-          <Button variant="soft" size="sm" onClick={openAddForm} className="titlebar-no-drag gap-1.5">
-            <Plus size={14} />
-            {t('settings.addGateway')}
-          </Button>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="type-section-title text-[var(--text-primary)]">{t('settings.gateways')}</h3>
+          {!showForm && (
+            <ToolbarButton variant="soft" size="sm" onClick={openAddForm} icon={<Plus size={14} />}>
+              {t('settings.addGateway')}
+            </ToolbarButton>
+          )}
         </div>
-        <p className="text-sm text-[var(--text-muted)] mb-4">{t('settings.gatewaysDesc')}</p>
 
         <div className="space-y-2">
           <AnimatePresence>
@@ -598,6 +604,7 @@ export default function GatewaysSection() {
                   status={gatewayStatusMap[gw.id] ?? 'disconnected'}
                   isDefault={gw.id === defaultGwId}
                   isEditing={editingId === gw.id && showForm}
+                  serverVersion={gatewayVersionMap[gw.id]}
                   onEdit={() => openEditForm(gw)}
                   onRemove={() => setDeletingGwId(gw.id)}
                   onSetDefault={() => handleSetDefault(gw.id)}
@@ -619,14 +626,17 @@ export default function GatewaysSection() {
           </AnimatePresence>
 
           {gateways.length === 0 && !showForm && (
-            <div className={cn(cardClass, 'flex flex-col items-center py-8')}>
-              <Server size={32} className="text-[var(--text-muted)] opacity-40 mb-3" />
-              <p className="text-sm text-[var(--text-muted)] mb-3">{t('settings.noGateways')}</p>
-              <Button variant="soft" size="sm" onClick={openAddForm} className="titlebar-no-drag gap-1.5">
-                <Plus size={14} />
-                {t('settings.addFirstGateway')}
-              </Button>
-            </div>
+            <SettingGroup>
+              <EmptyState
+                icon={<Server size={24} className="text-[var(--text-muted)]" />}
+                title={t('settings.noGateways')}
+                action={
+                  <ToolbarButton variant="soft" size="sm" onClick={openAddForm} icon={<Plus size={14} />}>
+                    {t('settings.addFirstGateway')}
+                  </ToolbarButton>
+                }
+              />
+            </SettingGroup>
           )}
 
           <AnimatePresence>
@@ -684,16 +694,8 @@ export default function GatewaysSection() {
             <DialogDescription className="pt-2">{t('pairing.description')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <div
-              className={cn(
-                'rounded-lg p-3 text-sm',
-                'bg-[var(--bg-tertiary)] border border-[var(--border)]',
-                'text-[var(--text-secondary)]',
-              )}
-            >
-              {t('pairing.instructions')}
-            </div>
-            <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+            <InlineNotice tone="info">{t('pairing.instructions')}</InlineNotice>
+            <div className="type-support flex items-center gap-2 text-[var(--text-muted)]">
               <Loader2 size={14} className="animate-spin" />
               {t('pairing.waiting')}
             </div>

@@ -3,6 +3,10 @@ productName: ClawWork
 directories:
   buildResources: build
   output: dist
+publish:
+  provider: github
+  owner: clawwork-ai
+  repo: clawwork
 extraResources:
   - from: build/icon.png
     to: icon.png
@@ -17,10 +21,12 @@ mac:
   target:
     - target: dmg
       arch:
-        - universal
+        - arm64
+        - x64
     - target: zip
       arch:
-        - universal
+        - arm64
+        - x64
   category: public.app-category.developer-tools
   icon: build/icon.icns
   hardenedRuntime: true
@@ -30,8 +36,6 @@ mac:
   notarize: true
   extendInfo:
     NSMicrophoneUsageDescription: ClawWork needs microphone access for voice dictation in chat input.
-dmg:
-  writeUpdateInfo: false
 win:
   target:
     - target: nsis
@@ -43,3 +47,16 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Development
+  icon: build/icon.png
+  maintainer: samzong <samzong.lu@gmail.com>
+  desktop:
+    StartupWMClass: ClawWork

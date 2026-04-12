@@ -1,13 +1,15 @@
-import { ipcMain, BrowserWindow, net } from 'electron';
-import { readFileSync } from 'fs';
+import { ipcMain, BrowserWindow, dialog, shell } from 'electron';
+import { readFileSync, realpathSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { fileURLToPath } from 'node:url';
 import { resolve, sep } from 'path';
 import { eq } from 'drizzle-orm';
 import { getDb, getSqlite } from '../db/index.js';
-import { artifacts } from '../db/schema.js';
+import { artifacts, tasks, messages } from '../db/schema.js';
 import { saveArtifact, saveArtifactFromBuffer } from '../artifact/save.js';
-import { commitArtifact } from '../artifact/git.js';
 import { getWorkspacePath } from '../workspace/config.js';
 import { searchArtifacts } from '../db/search.js';
+import { safeFetch } from '../net/safe-fetch.js';
 
 interface SaveParams {
   taskId: string;
@@ -24,21 +26,20 @@ export function registerArtifactHandlers(): void {
       return { ok: false, error: 'workspace not configured' };
     }
     try {
+      const realSource = realpathSync(params.sourcePath);
+      const allowedPrefixes = [resolve(workspacePath) + sep, tmpdir() + sep];
+      if (!allowedPrefixes.some((p) => realSource.startsWith(p))) {
+        return { ok: false, error: 'source path outside allowed locations' };
+      }
+
       const artifact = await saveArtifact({
         workspacePath,
         taskId: params.taskId,
-        sourcePath: params.sourcePath,
+        sourcePath: realSource,
         messageId: params.messageId,
         fileName: params.fileName,
         mediaType: params.mediaType,
       });
-
-      const sha = await commitArtifact(workspacePath, artifact.localPath);
-      if (sha) {
-        const db = getDb();
-        db.update(artifacts).set({ gitSha: sha }).where(eq(artifacts.id, artifact.id)).run();
-        artifact.gitSha = sha;
-      }
 
       const win = BrowserWindow.getAllWindows()[0];
       if (win) {
@@ -83,11 +84,8 @@ export function registerArtifactHandlers(): void {
     const workspacePath = getWorkspacePath();
     if (!workspacePath) return { ok: false, error: 'workspace not configured' };
     try {
-      const normalizedBase = resolve(workspacePath);
-      const fullPath = resolve(normalizedBase, params.localPath);
-      if (!fullPath.startsWith(normalizedBase + sep) && fullPath !== normalizedBase) {
-        return { ok: false, error: 'invalid path' };
-      }
+      const fullPath = resolveArtifactPath(workspacePath, params.localPath);
+      if (!fullPath) return { ok: false, error: 'invalid path' };
       const encoding = isTextFile(params.localPath) ? 'utf-8' : 'base64';
       const content = readFileSync(fullPath, encoding);
       return { ok: true, result: { content, encoding } };
@@ -142,12 +140,6 @@ export function registerArtifactHandlers(): void {
           artifactType: 'code',
           contentText: params.content,
         });
-        const sha = await commitArtifact(workspacePath, artifact.localPath, `save: ${artifact.name}`);
-        if (sha) {
-          const db = getDb();
-          db.update(artifacts).set({ gitSha: sha }).where(eq(artifacts.id, artifact.id)).run();
-          artifact.gitSha = sha;
-        }
         const win = BrowserWindow.getAllWindows()[0];
         if (win) win.webContents.send('artifact:saved', artifact);
         return { ok: true, result: artifact };
@@ -166,11 +158,9 @@ export function registerArtifactHandlers(): void {
         let buffer: Buffer;
         const url = params.url;
         if (/^https?:\/\//.test(url)) {
-          const res = await net.fetch(url);
-          if (!res.ok) return { ok: false, error: `fetch failed: ${res.status}` };
-          buffer = Buffer.from(await res.arrayBuffer());
+          buffer = await safeFetch(url);
         } else if (url.startsWith('file://')) {
-          const filePath = resolve(url.replace('file://', ''));
+          const filePath = resolve(fileURLToPath(url));
           if (!filePath.startsWith(resolve(workspacePath) + sep)) {
             return { ok: false, error: 'file path outside workspace' };
           }
@@ -188,12 +178,6 @@ export function registerArtifactHandlers(): void {
           buffer,
           artifactType: 'image',
         });
-        const sha = await commitArtifact(workspacePath, artifact.localPath, `save: ${artifact.name}`);
-        if (sha) {
-          const db = getDb();
-          db.update(artifacts).set({ gitSha: sha }).where(eq(artifacts.id, artifact.id)).run();
-          artifact.gitSha = sha;
-        }
         const win = BrowserWindow.getAllWindows()[0];
         if (win) win.webContents.send('artifact:saved', artifact);
         return { ok: true, result: artifact };
@@ -203,12 +187,83 @@ export function registerArtifactHandlers(): void {
     },
   );
 
+  ipcMain.handle('artifact:open-file', async (_event, params: { localPath: string }) => {
+    const workspacePath = getWorkspacePath();
+    if (!workspacePath) return { ok: false, error: 'workspace not configured' };
+    try {
+      const fullPath = resolveArtifactPath(workspacePath, params.localPath);
+      if (!fullPath) return { ok: false, error: 'invalid path' };
+      const result = await shell.openPath(fullPath);
+      if (result) return { ok: false, error: result };
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'unknown error' };
+    }
+  });
+
+  ipcMain.handle('artifact:show-in-folder', async (_event, params: { localPath: string }) => {
+    const workspacePath = getWorkspacePath();
+    if (!workspacePath) return { ok: false, error: 'workspace not configured' };
+    try {
+      const fullPath = resolveArtifactPath(workspacePath, params.localPath);
+      if (!fullPath) return { ok: false, error: 'invalid path' };
+      shell.showItemInFolder(fullPath);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'unknown error' };
+    }
+  });
+
   ipcMain.handle('artifact:search', async (_event, params: { query: string }) => {
     const sqlite = getSqlite();
     if (!sqlite) return { ok: false, error: 'db not ready' };
     try {
       const results = searchArtifacts(sqlite, params.query);
       return { ok: true, result: results };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'unknown' };
+    }
+  });
+
+  ipcMain.handle('session:export-markdown', async (_event, params: { taskId: string }) => {
+    const workspacePath = getWorkspacePath();
+    if (!workspacePath) return { ok: false, error: 'workspace not configured' };
+    try {
+      const { md, safeName, lastMessageId } = loadSessionMarkdown(params.taskId);
+      const buffer = Buffer.from(md, 'utf-8');
+
+      const artifact = await saveArtifactFromBuffer({
+        workspacePath,
+        taskId: params.taskId,
+        messageId: lastMessageId ?? params.taskId,
+        fileName: `${safeName}.md`,
+        buffer,
+        artifactType: 'file',
+        contentText: md,
+      });
+
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) win.webContents.send('artifact:saved', artifact);
+      return { ok: true, result: artifact };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'unknown' };
+    }
+  });
+
+  ipcMain.handle('session:export-markdown-as', async (_event, params: { taskId: string }) => {
+    try {
+      const { md, safeName } = loadSessionMarkdown(params.taskId);
+      const win = BrowserWindow.getAllWindows()[0];
+      if (!win) return { ok: false, error: 'no window' };
+
+      const { canceled, filePath } = await dialog.showSaveDialog(win, {
+        defaultPath: `${safeName}.md`,
+        filters: [{ name: 'Markdown', extensions: ['md'] }],
+      });
+      if (canceled || !filePath) return { ok: false, error: 'cancelled' };
+
+      writeFileSync(filePath, md, 'utf-8');
+      return { ok: true, result: { filePath } };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'unknown' };
     }
@@ -244,4 +299,103 @@ function isTextFile(localPath: string): boolean {
   const dot = localPath.lastIndexOf('.');
   if (dot === -1) return true;
   return TEXT_EXTS.has(localPath.slice(dot).toLowerCase());
+}
+
+function resolveArtifactPath(workspacePath: string, localPath: string): string | null {
+  const base = resolve(workspacePath);
+  const full = resolve(base, localPath);
+  if (!full.startsWith(base + sep) && full !== base) return null;
+  return full;
+}
+
+type TaskRow = typeof tasks.$inferSelect;
+type MessageRow = typeof messages.$inferSelect;
+
+interface ExportResult {
+  md: string;
+  safeName: string;
+  lastMessageId: string | undefined;
+}
+
+function loadSessionMarkdown(taskId: string): ExportResult {
+  const db = getDb();
+  const taskRows = db.select().from(tasks).where(eq(tasks.id, taskId)).all();
+  if (taskRows.length === 0) throw new Error('task not found');
+  const task = taskRows[0];
+
+  const msgRows = db.select().from(messages).where(eq(messages.taskId, taskId)).orderBy(messages.timestamp).all();
+
+  const md = buildSessionMarkdown(task, msgRows);
+  const safeName =
+    task.title
+      .replace(/[<>:"/\\|?*]/g, '_')
+      .replace(/[\t\n\r]/g, '_')
+      .trim() || 'session';
+  const lastMessageId = msgRows.length > 0 ? msgRows[msgRows.length - 1].id : undefined;
+  return { md, safeName, lastMessageId };
+}
+
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const Y = d.getFullYear();
+  const M = String(d.getMonth() + 1).padStart(2, '0');
+  const D = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${Y}-${M}-${D} ${h}:${m}`;
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  user: 'User',
+  assistant: 'Assistant',
+  system: 'System',
+};
+
+function buildSessionMarkdown(task: TaskRow, msgs: MessageRow[]): string {
+  const lines: string[] = [];
+
+  lines.push(`# ${task.title || 'Untitled Session'}`);
+  lines.push('');
+  lines.push(`**Created:** ${formatTimestamp(task.createdAt)}`);
+  if (task.model) {
+    const provider = task.modelProvider ? ` (${task.modelProvider})` : '';
+    lines.push(`**Model:** ${task.model}${provider}`);
+  }
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  for (const msg of msgs) {
+    const label = ROLE_LABEL[msg.role] ?? msg.role;
+    lines.push(`## ${label}`);
+    lines.push(`*${formatTimestamp(msg.timestamp)}*`);
+    lines.push('');
+    lines.push(msg.content);
+
+    if (msg.toolCalls) {
+      let calls: { name?: string; status?: string }[] = [];
+      try {
+        calls = JSON.parse(msg.toolCalls as string);
+      } catch {}
+      if (calls.length > 0) {
+        lines.push('');
+        lines.push('<details>');
+        lines.push('<summary>Tool Calls</summary>');
+        lines.push('');
+        for (const tc of calls) {
+          const status = tc.status ? ` [${tc.status}]` : '';
+          lines.push(`- \`${tc.name ?? 'unknown'}\`${status}`);
+        }
+        lines.push('');
+        lines.push('</details>');
+      }
+    }
+
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }

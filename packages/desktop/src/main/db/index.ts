@@ -9,6 +9,17 @@ import { initFTS } from './fts.js';
 let db: ReturnType<typeof drizzle> | null = null;
 let sqlite: Database.Database | null = null;
 
+function migrateAddColumn(database: Database.Database, sql: string): void {
+  try {
+    database.exec(sql);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!msg.includes('duplicate column')) {
+      console.error('[db:migration]', msg);
+    }
+  }
+}
+
 const CREATE_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
@@ -35,7 +46,8 @@ CREATE TABLE IF NOT EXISTS messages (
   role TEXT NOT NULL,
   content TEXT NOT NULL,
   timestamp TEXT NOT NULL,
-  image_attachments TEXT
+  image_attachments TEXT,
+  tool_calls TEXT
 );
 
 CREATE TABLE IF NOT EXISTS artifacts (
@@ -48,7 +60,6 @@ CREATE TABLE IF NOT EXISTS artifacts (
   local_path TEXT NOT NULL,
   mime_type TEXT NOT NULL DEFAULT '',
   size INTEGER NOT NULL DEFAULT 0,
-  git_sha TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
 `;
@@ -61,9 +72,7 @@ function openDatabaseAt(workspacePath: string): void {
   sqlite.pragma('foreign_keys = ON');
   sqlite.exec(CREATE_TABLES_SQL);
 
-  try {
-    sqlite.exec("ALTER TABLE tasks ADD COLUMN gateway_id TEXT NOT NULL DEFAULT ''");
-  } catch {}
+  migrateAddColumn(sqlite, "ALTER TABLE tasks ADD COLUMN gateway_id TEXT NOT NULL DEFAULT ''");
 
   for (const sql of [
     'ALTER TABLE tasks ADD COLUMN model TEXT',
@@ -73,32 +82,82 @@ function openDatabaseAt(workspacePath: string): void {
     'ALTER TABLE tasks ADD COLUMN output_tokens INTEGER',
     'ALTER TABLE tasks ADD COLUMN context_tokens INTEGER',
   ]) {
-    try {
-      sqlite.exec(sql);
-    } catch {}
+    migrateAddColumn(sqlite, sql);
   }
 
-  try {
-    sqlite.exec('ALTER TABLE messages ADD COLUMN image_attachments TEXT');
-  } catch {}
+  migrateAddColumn(sqlite, 'ALTER TABLE messages ADD COLUMN image_attachments TEXT');
+  migrateAddColumn(sqlite, 'ALTER TABLE messages ADD COLUMN tool_calls TEXT');
+
+  for (const col of ['session_key TEXT', 'agent_id TEXT', 'run_id TEXT']) {
+    migrateAddColumn(sqlite, `ALTER TABLE messages ADD COLUMN ${col}`);
+  }
+
+  migrateAddColumn(sqlite, 'ALTER TABLE tasks ADD COLUMN ensemble INTEGER NOT NULL DEFAULT 0');
+  migrateAddColumn(sqlite, 'ALTER TABLE tasks ADD COLUMN team_id TEXT');
 
   sqlite.exec(`
-    DELETE FROM messages
-    WHERE rowid NOT IN (
-      SELECT MIN(rowid)
-      FROM messages
-      GROUP BY task_id, role, content, timestamp, COALESCE(image_attachments, '')
+    UPDATE messages SET session_key = (
+      SELECT t.session_key FROM tasks t WHERE t.id = messages.task_id
+    ) WHERE session_key IS NULL
+  `);
+  sqlite.exec(`UPDATE messages SET session_key = '' WHERE session_key IS NULL`);
+
+  sqlite.exec(`DROP INDEX IF EXISTS messages_logical_unique`);
+  sqlite.exec(`DROP INDEX IF EXISTS messages_dedup`);
+
+  sqlite.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS messages_dedup
+    ON messages(task_id, session_key, role, timestamp)
+  `);
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS task_rooms (
+      task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+      status TEXT NOT NULL DEFAULT 'active',
+      conductor_ready INTEGER NOT NULL DEFAULT 0
     )
   `);
 
   sqlite.exec(`
-    CREATE UNIQUE INDEX IF NOT EXISTS messages_logical_unique
-    ON messages(task_id, role, content, timestamp, COALESCE(image_attachments, ''))
+    CREATE TABLE IF NOT EXISTS task_room_sessions (
+      session_key TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id),
+      agent_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL DEFAULT '',
+      emoji TEXT,
+      verified_at TEXT NOT NULL
+    )
   `);
 
-  try {
-    sqlite.exec("ALTER TABLE artifacts ADD COLUMN content_text TEXT NOT NULL DEFAULT ''");
-  } catch {}
+  sqlite.exec("DELETE FROM messages WHERE role = 'assistant' AND (content = '' OR TRIM(content) = 'NO_REPLY')");
+
+  migrateAddColumn(sqlite, "ALTER TABLE artifacts ADD COLUMN content_text TEXT NOT NULL DEFAULT ''");
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      emoji TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      gateway_id TEXT NOT NULL,
+      source TEXT DEFAULT 'local',
+      version TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  migrateAddColumn(sqlite, "ALTER TABLE teams ADD COLUMN hub_slug TEXT DEFAULT ''");
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS team_agents (
+      team_id TEXT NOT NULL REFERENCES teams(id),
+      agent_id TEXT NOT NULL,
+      role TEXT DEFAULT '',
+      is_manager INTEGER DEFAULT 0,
+      PRIMARY KEY (team_id, agent_id)
+    )
+  `);
 
   initFTS(sqlite);
 

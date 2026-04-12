@@ -1,0 +1,109 @@
+{
+  "agents": {
+    "empty": "No agents available",
+    "selectTitle": "Select Agent"
+  },
+  "app": {
+    "error": "Something went wrong",
+    "loading": "Loading...",
+    "name": "ClawWork",
+    "paired": "Mobile device paired",
+    "reload": "Reload"
+  },
+  "chat": {
+    "abortButton": "Stop",
+    "assistant": "Assistant",
+    "assistantMessage": "Assistant message",
+    "authorizationPending": "Waiting for authorization...",
+    "emptyState": "Select a task or create a new one",
+    "inputPlaceholder": "Type a message...",
+    "mainArea": "Chat",
+    "sendButton": "Send",
+    "systemMessage": "System message",
+    "thinking": "Thinking...",
+    "userMessage": "Your message",
+    "virtualizedList": "Chat transcript"
+  },
+  "debugLog": {
+    "clearLog": "Clear log",
+    "close": "Close",
+    "copyLog": "Copy log",
+    "empty": "No events yet",
+    "reconnect": "Reconnect",
+    "title": "Gateway Log"
+  },
+  "drawer": {
+    "closeButton": "Close menu",
+    "menuButton": "Open menu",
+    "newTaskButton": "New task",
+    "search": "Search",
+    "settings": "Settings",
+    "signOut": "Sign out",
+    "signOutConfirm": "Sign out? All local data will be cleared.",
+    "title": "Navigation drawer"
+  },
+  "errors": {
+    "agentNotResponding": "Agent is not responding - it may be unavailable or misconfigured on the server. Try a different agent.",
+    "failed": "failed",
+    "requestFailed": "Request failed",
+    "sendFailed": "Send failed",
+    "serverAborted": "Task interrupted by server",
+    "stage": {
+      "final": "Finalize",
+      "lifecycle": "Agent",
+      "persist": "Persist",
+      "send": "Send",
+      "stream": "Stream",
+      "sync": "Sync"
+    },
+    "unknown": "Unknown error"
+  },
+  "gateway": {
+    "connected": "Connected",
+    "connecting": "Connecting...",
+    "disconnected": "Disconnected",
+    "statusLabel": "Gateway connection status"
+  },
+  "pairing": {
+    "cameraError": "Camera access denied",
+    "cancelButton": "Cancel",
+    "instruction": "After scanning, approve this device on your desktop before the mobile app can connect.",
+    "invalidQr": "Invalid QR code",
+    "loadingCamera": "Loading camera...",
+    "scanButton": "Scan QR Code",
+    "scannerUnsupported": "QR scanner not supported on this browser",
+    "subtitle": "Scan the QR code shown on your desktop app to get started",
+    "videoError": "Failed to start camera"
+  },
+  "qrScanner": {
+    "scanFrameLabel": "QR code scan area",
+    "videoLabel": "Camera viewfinder for QR code scanning"
+  },
+  "settings": {
+    "applyUpdate": "Update Available — Tap to Install",
+    "checking": "Checking...",
+    "checkUpdate": "Check for Updates",
+    "darkMode": "Dark Mode",
+    "language": "Language",
+    "lightMode": "Light Mode",
+    "updateFailed": "Update Check Failed",
+    "updateUnavailable": "Updates Not Available",
+    "upToDate": "Already Up to Date",
+    "version": "Version {{version}}"
+  },
+  "shell": {
+    "reconnect": "Reconnect"
+  },
+  "tasks": {
+    "empty": "No tasks yet",
+    "navigationLabel": "Task list",
+    "newTask": "New Task",
+    "older": "Older",
+    "thisWeek": "This Week",
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "tools": {
+    "emptyDetails": "No details available"
+  }
+}

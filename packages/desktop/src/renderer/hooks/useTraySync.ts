@@ -2,18 +2,19 @@ import { useEffect, useRef } from 'react';
 import { useTaskStore } from '../stores/taskStore';
 import { useUiStore } from '../stores/uiStore';
 import { useMessageStore } from '../stores/messageStore';
+import i18n from '../i18n';
 
 function formatDuration(updatedAt: string): string {
   const ms = Date.now() - new Date(updatedAt).getTime();
   const min = Math.floor(ms / 60000);
-  if (min < 1) return 'just now';
-  if (min === 1) return '1 min ago';
-  return `${min} min ago`;
+  if (min < 1) return i18n.t('common.justNow');
+  if (min === 1) return i18n.t('common.minAgo', { count: 1 });
+  return i18n.t('common.minAgo', { count: min });
 }
 
 export function useTraySync(): void {
   const tasks = useTaskStore((s) => s.tasks);
-  const processingTasks = useMessageStore((s) => s.processingTasks);
+  const processingBySession = useMessageStore((s) => s.processingBySession);
   const gatewayStatusMap = useUiStore((s) => s.gatewayStatusMap);
   const unreadTaskIds = useUiStore((s) => s.unreadTaskIds);
 
@@ -21,7 +22,7 @@ export function useTraySync(): void {
 
   useEffect(() => {
     const anyDisconnected = Object.values(gatewayStatusMap).some((s) => s === 'disconnected');
-    const isRunning = processingTasks.size > 0;
+    const isRunning = processingBySession.size > 0;
     const hasUnread = unreadTaskIds.size > 0;
 
     let status: 'idle' | 'running' | 'unread' | 'disconnected';
@@ -30,23 +31,23 @@ export function useTraySync(): void {
     else if (hasUnread) status = 'unread';
     else status = 'idle';
 
-    const activeIds = tasks.filter((t) => processingTasks.has(t.id)).map((t) => t.id);
+    const activeIds = tasks.filter((t) => processingBySession.has(t.sessionKey)).map((t) => t.id);
     const taskIdsKey = activeIds.join(',');
 
     if (prevRef.current.status === status && prevRef.current.taskIds === taskIdsKey) return;
     prevRef.current = { status, taskIds: taskIdsKey };
 
-    const streamingByTask = useMessageStore.getState().streamingByTask;
+    const activeTurnBySession = useMessageStore.getState().activeTurnBySession;
     const activeTasks = activeIds.map((id) => {
-      const t = tasks.find((task) => task.id === id)!;
+      const task = tasks.find((t) => t.id === id)!;
       return {
         taskId: id,
-        title: t.title || 'Untitled',
-        snippet: (streamingByTask[id] ?? '').slice(0, 60),
-        duration: formatDuration(t.updatedAt),
+        title: task.title || i18n.t('common.noTitle'),
+        snippet: (activeTurnBySession[task.sessionKey]?.streamingText ?? '').slice(0, 60),
+        duration: formatDuration(task.updatedAt),
       };
     });
 
     window.clawwork.updateTrayStatus(status, activeTasks);
-  }, [tasks, processingTasks, gatewayStatusMap, unreadTaskIds]);
+  }, [tasks, processingBySession, gatewayStatusMap, unreadTaskIds]);
 }

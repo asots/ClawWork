@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useCallback, useRef, useState, type MouseEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Loader2, ChevronRight, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -11,8 +11,15 @@ import { motion as motionPresets } from '@/styles/design-tokens';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import FileCard from '@/components/FileCard';
 import FilePreview from '@/components/FilePreview';
+import { TaskContextMenuPopover, type MenuItem } from '@/components/ContextMenu';
+import { useResizePanel } from '@/hooks/useResizePanel';
 import type { Artifact } from '@clawwork/shared';
 import type { ArtifactSearchResult } from '@/stores/fileStore';
+import EmptyState from '@/components/semantic/EmptyState';
+import ListItem from '@/components/semantic/ListItem';
+import SectionCard from '@/components/semantic/SectionCard';
+import ToolbarButton from '@/components/semantic/ToolbarButton';
+import WindowTitlebar from '@/components/semantic/WindowTitlebar';
 
 function sortArtifacts(list: Artifact[], sortBy: 'date' | 'name' | 'type'): Artifact[] {
   const sorted = [...list];
@@ -29,7 +36,7 @@ function sortArtifacts(list: Artifact[], sortBy: 'date' | 'name' | 'type'): Arti
 function SnippetHighlight({ snippet }: { snippet: string }) {
   const parts = snippet.split(/(<mark>[^<]*<\/mark>)/g);
   return (
-    <span className="text-xs text-[var(--text-muted)] line-clamp-1">
+    <span className="type-support line-clamp-1 text-[var(--text-muted)]">
       {parts.map((part, i) =>
         part.startsWith('<mark>') ? (
           <mark key={i} className="bg-[var(--accent-dim)] text-[var(--accent)] not-italic rounded px-0.5">
@@ -42,6 +49,8 @@ function SnippetHighlight({ snippet }: { snippet: string }) {
     </span>
   );
 }
+
+type FileMenuState = { artifact: Artifact; position: { x: number; y: number } } | null;
 
 export default function FileBrowser() {
   const { t } = useTranslation();
@@ -66,17 +75,71 @@ export default function FileBrowser() {
   const setHighlightedMessage = useMessageStore((s) => s.setHighlightedMessage);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestIdRef = useRef(0);
+
+  const [fileMenu, setFileMenu] = useState<FileMenuState>(null);
+
+  const openFileMenu = useCallback((e: MouseEvent, artifact: Artifact) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileMenu({ artifact, position: { x: e.clientX, y: e.clientY } });
+  }, []);
+
+  const closeFileMenu = useCallback(() => {
+    setFileMenu(null);
+  }, []);
+
+  const handleNavigateToTask = useCallback(
+    (taskId: string, messageId: string) => {
+      setActiveTask(taskId);
+      setHighlightedMessage(messageId);
+      setMainView('chat');
+    },
+    [setActiveTask, setHighlightedMessage, setMainView],
+  );
+
+  const fileMenuItems = useMemo((): MenuItem[] => {
+    if (!fileMenu) return [];
+    const a = fileMenu.artifact;
+    return [
+      {
+        label: t('filePreview.openInEditor'),
+        action: () => window.clawwork.openArtifactFile(a.localPath),
+      },
+      {
+        label: t('filePreview.revealInFolder'),
+        action: () => window.clawwork.showArtifactInFolder(a.localPath),
+      },
+      {
+        label: t('filePreview.goToSourceShort'),
+        action: () => handleNavigateToTask(a.taskId, a.messageId),
+      },
+    ];
+  }, [fileMenu, t, handleNavigateToTask]);
 
   useEffect(() => {
     return () => setSelectedArtifact(null);
   }, [setSelectedArtifact]);
 
   useEffect(() => {
-    window.clawwork.listArtifacts().then((res) => {
-      if (res.ok && res.result) {
-        setArtifacts(res.result as unknown as Artifact[]);
-      }
-    });
+    let cancelled = false;
+
+    window.clawwork
+      .listArtifacts()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.result) {
+          setArtifacts(res.result as unknown as Artifact[]);
+        }
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.error('[FileBrowser] listArtifacts failed:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [setArtifacts]);
 
   useEffect(() => {
@@ -87,10 +150,12 @@ export default function FileBrowser() {
       return;
     }
     setIsSearching(true);
+    const requestId = ++requestIdRef.current;
     debounceRef.current = setTimeout(() => {
       window.clawwork
         .searchArtifacts(searchQuery)
         .then((res) => {
+          if (requestIdRef.current !== requestId) return;
           setIsSearching(false);
           if (res.ok && res.result) {
             setSearchResults(res.result as unknown as ArtifactSearchResult[]);
@@ -99,6 +164,7 @@ export default function FileBrowser() {
           }
         })
         .catch(() => {
+          if (requestIdRef.current !== requestId) return;
           setIsSearching(false);
           setSearchResults([]);
         });
@@ -132,52 +198,56 @@ export default function FileBrowser() {
     return Array.from(ids);
   }, [artifacts]);
 
-  const handleNavigateToTask = useCallback(
-    (taskId: string, messageId: string) => {
-      setActiveTask(taskId);
-      setHighlightedMessage(messageId);
-      setMainView('chat');
-    },
-    [setActiveTask, setHighlightedMessage, setMainView],
-  );
+  const {
+    width: panelWidth,
+    isDragging,
+    handleMouseDown,
+  } = useResizePanel({
+    defaultWidth: 360,
+    minWidth: 280,
+    maxWidth: 700,
+    storageKey: 'clawwork:file-preview-width',
+  });
 
   const isSearchMode = searchQuery.trim().length > 0;
 
   return (
     <div className="flex h-full">
       <div className="flex flex-col flex-1 min-w-0">
-        <header className="titlebar-drag flex items-center justify-between px-6 py-3 border-b border-[var(--border)] flex-shrink-0 relative z-[51]">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t('common.fileManager')}</h2>
-          <div className="titlebar-no-drag flex items-center gap-2">
-            <select
-              value={filterTaskId ?? ''}
-              onChange={(e) => setFilterTaskId(e.target.value || null)}
-              className={cn(
-                'h-7 px-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)]',
-                'text-xs text-[var(--text-secondary)] outline-none cursor-pointer',
-              )}
-            >
-              <option value="">{t('fileBrowser.allTasks')}</option>
-              {taskIdsWithArtifacts.map((id) => (
-                <option key={id} value={id}>
-                  {taskMap.get(id) ?? id}
-                </option>
-              ))}
-            </select>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'date' | 'name' | 'type')}
-              className={cn(
-                'h-7 px-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)]',
-                'text-xs text-[var(--text-secondary)] outline-none cursor-pointer',
-              )}
-            >
-              <option value="date">{t('fileBrowser.sortByDate')}</option>
-              <option value="name">{t('fileBrowser.sortByName')}</option>
-              <option value="type">{t('fileBrowser.sortByType')}</option>
-            </select>
-          </div>
-        </header>
+        <WindowTitlebar
+          left={<h2 className="type-section-title text-[var(--text-primary)]">{t('common.fileManager')}</h2>}
+          right={
+            <>
+              <select
+                value={filterTaskId ?? ''}
+                onChange={(e) => setFilterTaskId(e.target.value || null)}
+                className={cn(
+                  'glow-focus h-7 px-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)]',
+                  'type-label text-[var(--text-secondary)] cursor-pointer',
+                )}
+              >
+                <option value="">{t('fileBrowser.allTasks')}</option>
+                {taskIdsWithArtifacts.map((id) => (
+                  <option key={id} value={id}>
+                    {taskMap.get(id) ?? id}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'date' | 'name' | 'type')}
+                className={cn(
+                  'glow-focus h-7 px-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)]',
+                  'type-label text-[var(--text-secondary)] cursor-pointer',
+                )}
+              >
+                <option value="date">{t('fileBrowser.sortByDate')}</option>
+                <option value="name">{t('fileBrowser.sortByName')}</option>
+                <option value="type">{t('fileBrowser.sortByType')}</option>
+              </select>
+            </>
+          }
+        />
 
         <div className="titlebar-no-drag px-6 py-3 border-b border-[var(--border)] flex-shrink-0">
           <div className="relative">
@@ -194,9 +264,9 @@ export default function FileBrowser() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('fileBrowser.searchFiles')}
               className={cn(
-                'w-full h-9 pl-10 pr-9 rounded-lg',
+                'w-full h-[var(--density-control-height)] pl-10 pr-9 rounded-lg',
                 'bg-[var(--bg-tertiary)] border border-[var(--border)]',
-                'text-sm text-[var(--text-secondary)] outline-none',
+                'type-body text-[var(--text-secondary)] outline-none',
                 'focus:border-[var(--border-accent)] focus:bg-[var(--bg-secondary)]',
                 'placeholder:text-[var(--text-muted)] transition-all duration-150',
               )}
@@ -204,7 +274,8 @@ export default function FileBrowser() {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                aria-label={t('common.close')}
+                className="glow-focus absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
               >
                 <X size={14} />
               </button>
@@ -220,7 +291,7 @@ export default function FileBrowser() {
                   <Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" />
                 </div>
               ) : searchResults.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)] text-center py-8">{t('common.noFiles')}</p>
+                <EmptyState title={t('common.noFiles')} className="py-8" />
               ) : (
                 <div className="space-y-1.5">
                   {searchResults.map((r) => (
@@ -228,39 +299,45 @@ export default function FileBrowser() {
                       key={r.id}
                       onClick={() => setSelectedArtifact(r.id === selectedId ? null : r.id)}
                       className={cn(
-                        'w-full flex flex-col gap-0.5 px-3 py-2.5 rounded-xl text-left transition-colors',
+                        'w-full rounded-xl text-left transition-colors',
                         'bg-[var(--bg-secondary)] border hover:bg-[var(--bg-hover)]',
                         r.id === selectedId
                           ? 'border-[var(--border-accent)] bg-[var(--accent-dim)]'
                           : 'border-[var(--border)]',
                       )}
                     >
-                      <span className="text-sm text-[var(--text-primary)] font-medium truncate">{r.name}</span>
-                      {r.contentSnippet && <SnippetHighlight snippet={r.contentSnippet} />}
-                      <span className="text-xs text-[var(--text-muted)]">{taskMap.get(r.taskId) ?? r.taskId}</span>
+                      <ListItem
+                        title={r.name}
+                        subtitle={r.contentSnippet ? <SnippetHighlight snippet={r.contentSnippet} /> : undefined}
+                        meta={taskMap.get(r.taskId) ?? r.taskId}
+                        active={r.id === selectedId}
+                        className="rounded-xl px-3 py-2.5"
+                      />
                     </button>
                   ))}
                 </div>
               )
             ) : sorted.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-[var(--bg-tertiary)] flex items-center justify-center">
-                  <Search size={20} className="text-[var(--text-muted)]" />
-                </div>
-                <p className="text-sm text-[var(--text-muted)]">{t('common.noFiles')}</p>
-              </div>
+              <EmptyState
+                icon={<Search size={20} className="text-[var(--text-muted)]" />}
+                title={t('common.noFiles')}
+                className="py-20"
+              />
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {sorted.map((a) => (
-                  <FileCard
-                    key={a.id}
-                    artifact={a}
-                    taskTitle={taskMap.get(a.taskId) ?? a.taskId}
-                    selected={a.id === selectedId}
-                    onClick={() => setSelectedArtifact(a.id === selectedId ? null : a.id)}
-                  />
-                ))}
-              </div>
+              <SectionCard bodyClassName="p-0" className="border-none bg-transparent shadow-none">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                  {sorted.map((a) => (
+                    <FileCard
+                      key={a.id}
+                      artifact={a}
+                      taskTitle={taskMap.get(a.taskId) ?? a.taskId}
+                      selected={a.id === selectedId}
+                      onClick={() => setSelectedArtifact(a.id === selectedId ? null : a.id)}
+                      onContextMenu={(e) => openFileMenu(e, a)}
+                    />
+                  ))}
+                </div>
+              </SectionCard>
             )}
           </div>
         </ScrollArea>
@@ -272,26 +349,47 @@ export default function FileBrowser() {
             {...motionPresets.slideIn}
             initial={{ opacity: 0, x: 16 }}
             exit={{ opacity: 0, x: 16 }}
-            className="relative w-[360px] flex-shrink-0 border-l border-[var(--border)] bg-[var(--bg-secondary)]"
+            className="relative flex-shrink-0 border-l border-[var(--border)] bg-[var(--bg-secondary)]"
+            style={{ width: panelWidth }}
           >
-            <button
+            <div
+              onMouseDown={handleMouseDown}
+              className={cn(
+                'absolute left-0 top-0 bottom-0 w-1 -translate-x-1/2 z-10 cursor-col-resize',
+                'group flex items-center justify-center',
+              )}
+            >
+              <div
+                className={cn(
+                  'w-1 h-8 rounded-full transition-colors duration-150',
+                  isDragging ? 'bg-[var(--accent)]' : 'bg-transparent group-hover:bg-[var(--text-muted)]',
+                )}
+              />
+            </div>
+            <ToolbarButton
               onClick={() => setSelectedArtifact(null)}
-              title="Close preview"
+              title={t('filePreview.close')}
+              icon={<ChevronRight size={13} />}
               className={cn(
                 'absolute left-0 top-1/2 -translate-x-full -translate-y-1/2 z-10',
-                'flex items-center justify-center w-5 h-12',
+                'w-5 h-12 justify-center p-0',
                 'bg-[var(--bg-secondary)] border border-r-0 border-[var(--border)]',
                 'rounded-l-lg cursor-pointer',
                 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]',
                 'transition-colors duration-150',
               )}
-            >
-              <ChevronRight size={13} />
-            </button>
+            />
             <FilePreview artifact={selectedArtifact} onNavigateToTask={handleNavigateToTask} />
           </motion.div>
         )}
       </AnimatePresence>
+
+      <TaskContextMenuPopover
+        open={fileMenu !== null}
+        position={fileMenu?.position ?? null}
+        items={fileMenuItems}
+        onClose={closeFileMenu}
+      />
     </div>
   );
 }

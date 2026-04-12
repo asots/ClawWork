@@ -25,7 +25,7 @@ Core value propositions:
 1. **Parallel multi-task** — Like Claude Cowork, multiple Tasks can run simultaneously; switch freely via the left-side list without interference
 2. **Structured context** — Three-panel layout: navigation + conversation flow + Progress/Artifacts panel
 3. **Artifact file management** — A capability Claude Cowork lacks: unified storage, search, and versioning of all AI artifacts
-4. **Local-first** — Artifacts stored in a local Git repo, traceable and accessible offline
+4. **Local-first** — Artifacts stored locally, traceable and accessible offline
 
 ### 1.3 Feature Comparison with Claude Cowork
 
@@ -116,9 +116,9 @@ Artifact {
 }
 ```
 
-### 2.4 Storage Structure (Git Repo)
+### 2.4 Storage Structure
 
-On first launch, the user selects a directory which is initialized as a Git repo:
+On first launch, the user selects a workspace directory:
 
 ```
 <user-workspace>/
@@ -135,14 +135,11 @@ On first launch, the user selects a directory which is initialized as a Git repo
 │   └── 2026-03-11-api-doc-generation/
 │       ├── artifacts/
 │       └── .task.json
-└── .gitignore              # ignores db.sqlite, temp files, etc.
 ```
 
 **Design Decision Notes:**
 
 - **SQLite for indexing, filesystem for storage**: SQLite enables fast queries and search; actual artifact files live directly on the filesystem. They're linked via filePath.
-- **Git for versioning, not syncing**: The Git repo provides local version traceability. If multi-device sync is needed later, users can configure a remote (GitHub, Gitea, etc.) themselves.
-- **Auto-commit strategy**: Automatically commits on every Task state change or new artifact generation; commit messages include the Task title and a change summary. No manual git operations required.
 
 ---
 
@@ -533,8 +530,8 @@ Only visible in the conversation flow view (hidden in the file browser view). Ke
   - ✅ Check: First launch shows Setup wizard; after selecting a directory, config is written to JSON
 - [x] **T3-2** SQLite database initialization: `better-sqlite3` + Drizzle ORM, tasks/messages/artifacts tables, DB file at `<workspacePath>/.clawwork.db` (WAL mode)
   - ✅ Check: DB file is auto-created; Drizzle schema matches the table structure
-- [x] **T3-3** Artifact persistence + Git auto-commit: artifact files copied to workspace task dir + SQLite insert + simple-git add/commit
-  - ✅ Check: `git log` shows commits for artifact changes
+- [x] **T3-3** Artifact persistence: artifact files copied to workspace task dir + SQLite insert
+  - ✅ Check: artifact files appear in workspace; DB rows match
 
 #### 3.2 File Browser
 
@@ -559,8 +556,8 @@ Only visible in the conversation flow view (hidden in the file browser view). Ke
 
 - [x] **T3.5-0** Install dependencies: framer-motion, cva, Radix UI suite (@radix-ui/react-collapsible, @radix-ui/react-dropdown-menu, @radix-ui/react-scroll-area, @radix-ui/react-tabs, @radix-ui/react-tooltip), @fontsource-variable/inter, @fontsource-variable/jetbrains-mono, clsx, tailwind-merge
   - ✅ Check: All dependencies installed without version conflicts
-- [x] **T3.5-1** Design system definition: `docs/design-system.md` spec doc + `design-tokens.ts` TS constants (colors, spacing, radius, typography, shadows, transitions, motion presets) + shadcn/ui base components (Button, ScrollArea, Collapsible, Tabs, DropdownMenu, Tooltip)
-  - ✅ Check: All token values are consistent between TS and CSS
+- [x] **T3.5-1** UI foundation definition: `theme.css` runtime tokens + `design-tokens.ts` motion/type helpers + shadcn/ui base components (Button, ScrollArea, Collapsible, Tabs, DropdownMenu, Tooltip)
+  - ✅ Check: UI primitives consume the shared token layer and contract gate
 
 #### 3.5.2 Foundation Refactor
 
@@ -579,7 +576,7 @@ Only visible in the conversation flow view (hidden in the file browser view). Ke
 
 #### 3.5.5 Cleanup + Verification
 
-- [x] **T3.5-5** Remove dead code: `useAgentMessages.ts` (superseded by `useGatewayDispatcher.ts`)
+- [x] **T3.5-5** Remove dead code: `useAgentMessages.ts` (superseded by `useGatewayBootstrap.ts`)
 - [x] **T3.5-6** Verification passed: tsc --noEmit zero errors, dev server starts normally, UI screenshots confirm correct rendering
 
 #### 3.5.6 Visual Polish — Font/Size Bump
@@ -710,7 +707,7 @@ clawwork/
 │               ├── lib/         # utils.ts, session-sync.ts
 │               ├── components/  # ChatMessage, ChatInput, StreamingMessage, ToolCallCard, FileCard, FilePreview
 │               │   └── ui/      # shadcn/ui base components
-│               ├── hooks/       # useGatewayDispatcher, useTheme
+│               ├── hooks/       # useGatewayBootstrap, useResizePanel, useTraySync
 │               └── layouts/     # LeftNav/, MainArea/, RightPanel/, FileBrowser/, Settings/, Setup/
 ```
 
@@ -764,7 +761,6 @@ clawwork (pnpm monorepo)
 │   ├── Main process
 │   │   ├── ws/ (GatewayClient → Gateway :18789)
 │   │   ├── better-sqlite3 + Drizzle ORM
-│   │   └── simple-git
 │   ├── Build: Vite 6 + electron-vite 3
 │   └── Packaging: electron-builder (macOS Universal Binary)
 └── Toolchain
@@ -868,7 +864,6 @@ clawwork (pnpm monorepo)
 | Gateway broadcasts all session events [#32579]     | Client receives messages from unrelated sessions; adds filtering overhead | Client-side filtering by sessionKey; performance impact is manageable                |
 | `mediaLocalRoots` security check [#20258] [#36477] | File sends may be rejected                                                | Properly configure the mediaLocalRoots parameter                                     |
 | Session auto-reset at 4 AM                         | Long-running Task conversation context gets cleared                       | Server-side config to disable auto-reset                                             |
-| Git auto-commit performance                        | Slow commits with many small files                                        | Batch commits + debounce                                                             |
 | macOS code signing and notarization                | Users unable to install                                                   | Handle in Phase 4; use ad-hoc signing during development                             |
 
 ---
